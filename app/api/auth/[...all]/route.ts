@@ -1,5 +1,5 @@
 /*
-path :           app/core/api/auth/[...all]/route.ts
+path :           app/api/auth/[...all]/route.ts
 projectId:       new-genesis
 type:            route
 generic:         false
@@ -10,11 +10,11 @@ role:            Route catch-all pour Better Auth : gère /api/auth/*. Toutes le
 flow:            Requête GET ou POST sur /api/auth/* → toNextJsHandler(auth) → Better Auth
                  traite la requête selon sa configuration interne → réponse HTTP.
 ecosystem:       Auth = [
-                   "@/app/core/api/auth/[...all]/route.ts",
-                   "@/app/core/auth/login/LoginForm.tsx",
-                   "@/app/core/auth/login/page.tsx",
-                   "@/app/core/auth/register/RegisterForm.tsx",
-                   "@/app/core/auth/register/page.tsx",
+                   "@/app/api/auth/[...all]/route.ts",
+                   "@/app/auth/login/LoginForm.tsx",
+                   "@/app/auth/login/page.tsx",
+                   "@/app/auth/register/RegisterForm.tsx",
+                   "@/app/auth/register/page.tsx",
                    "@/components/auth/PasswordInput.tsx",
                    "@/components/auth/PasswordStrength.tsx",
                    "@/lib/auth/auth-client.ts",

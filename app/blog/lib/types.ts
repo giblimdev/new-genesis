@@ -9,12 +9,14 @@ role:            Types TypeScript du module Blog, dérivés par z.infer
                  depuis @/app/blog/lib/validations.ts. Source unique de
                  vérité : aucune interface manuelle, aucun type écrit à
                  la main. Réexporte BlogDocument, BlogMeta, Taxonomy,
-                 Theme, Category, SubCategory, Tag, Article, ContentBlock
-                 et ses 8 sous-types, Comment, Group, GroupMember,
-                 Discussion, Post, Notification, FavoriteFolder,
-                 UserContent, AuditEntry, ainsi que les schémas d'input
-                 correspondants et les constantes partagées
-                 (BLOG_SCHEMA_VERSION, BLOG_ALLOWED_CONTENT_TYPES).
+                 Theme, Category, SubCategory, Tag, Playlist (NOUVEAU),
+                 PlaylistInput (NOUVEAU), PlaylistVisibility (NOUVEAU),
+                 Article, ContentBlock et ses 8 sous-types, Comment,
+                 Group, GroupMember, Discussion, Post, Notification,
+                 FavoriteFolder, UserContent, AuditEntry, ainsi que les
+                 schémas d'input correspondants et les constantes
+                 partagées (BLOG_SCHEMA_VERSION = 3,
+                 BLOG_ALLOWED_CONTENT_TYPES).
 
 flow:            Module TypeScript pur → ré-export des types via
                  z.infer<typeof schema> + ré-export explicite des
@@ -35,34 +37,40 @@ ecosystem:       BlogCore = [
                  ]
 
 relatedFiles:    ["@/app/blog/lib/validations.ts"]
+
 imports:         ["zod", "@/app/blog/lib/validations"]
+
 exports:         ["BlogDocument", "BlogMeta", "Taxonomy", "Theme",
-                  "Category", "SubCategory", "Tag", "Article",
-                  "ArticleStatus", "Visibility", "ContentBlock",
-                  "SectionBlock", "ParagraphBlock", "ImageBlock",
-                  "VideoBlock", "AudioBlock", "CodeBlock", "EmbedBlock",
-                  "DocumentBlock", "ContentBlockType", "Comment", "Group",
-                  "GroupMember", "Discussion", "Post", "Notification",
-                  "FavoriteFolder", "UserContent", "AuditEntry",
-                  "ArticleInput", "CommentInput", "DiscussionInput",
-                  "PostInput", "GroupInput", "NotificationInput",
-                  "FavoriteFolderInput",
+                  "Category", "SubCategory", "Tag",
+                  "Playlist", "PlaylistInput", "PlaylistVisibility",
+                  "Article", "ArticleStatus", "Visibility",
+                  "ContentBlock", "SectionBlock", "ParagraphBlock",
+                  "ImageBlock", "VideoBlock", "AudioBlock", "CodeBlock",
+                  "EmbedBlock", "DocumentBlock", "ContentBlockType",
+                  "Comment", "Group", "GroupMember", "Discussion", "Post",
+                  "Notification", "FavoriteFolder", "UserContent",
+                  "AuditEntry", "ArticleInput", "CommentInput",
+                  "DiscussionInput", "PostInput", "GroupInput",
+                  "NotificationInput", "FavoriteFolderInput",
                   "BLOG_SCHEMA_VERSION", "BLOG_ALLOWED_CONTENT_TYPES"]
+
 useBy:           ["@/app/blog/lib/storage.ts",
                   "@/app/blog/lib/tree.ts",
                   "@/app/blog/lib/utils/reading-time.ts",
                   "@/app/blog/lib/services/article.ts",
                   "@/app/blog/lib/services/comment.ts",
-                  "@/app/blog/lib/services/discussion.ts",
                   "@/app/blog/lib/services/favorite.ts",
                   "@/app/blog/lib/services/group.ts",
                   "@/app/blog/lib/services/like.ts",
                   "@/app/blog/lib/services/notification.ts",
+                  "@/app/blog/lib/services/playlist.ts",
                   "@/app/blog/lib/services/search.ts",
                   "@/app/blog/lib/services/taxonomy.ts"]
 
-userStories:     ["us1100010"]
-status:          done
+userStories:     ["us1100010",
+                  "*en tant qu'auteur je veux regrouper mes articles en playlists"]
+
+status:          wip
 pathChecked:     ✔true
 metaDataChecked: ✔true
 scriptChecked:   ✔true
@@ -97,6 +105,9 @@ import {
   notificationInputSchema,
   notificationSchema,
   paragraphBlockSchema,
+  playlistInputSchema,
+  playlistSchema,
+  playlistVisibilityEnum,
   postInputSchema,
   postSchema,
   sectionBlockSchema,
@@ -140,6 +151,10 @@ export type Category = z.infer<typeof categorySchema>;
 export type Theme = z.infer<typeof themeSchema>;
 export type Tag = z.infer<typeof tagSchema>;
 export type Taxonomy = z.infer<typeof taxonomySchema>;
+
+export type Playlist = z.infer<typeof playlistSchema>;
+export type PlaylistInput = z.infer<typeof playlistInputSchema>;
+export type PlaylistVisibility = z.infer<typeof playlistVisibilityEnum>;
 
 export type ArticleStatus = z.infer<typeof articleStatusEnum>;
 export type Visibility = z.infer<typeof visibilityEnum>;

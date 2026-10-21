@@ -86,7 +86,7 @@ export default function UserMenu() {
   if (!session?.user) {
     return (
       <Link
-        href="/core/auth/login"
+        href="/auth/login"
         className={`${buttonVariants({ size: "sm" })} gap-2 bg-gradient-to-r from-chart-1 to-chart-2 text-white shadow-md shadow-chart-1/30 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-chart-1/40 focus-visible:ring-2 focus-visible:ring-chart-1/40`}
       >
         <UserIcon className="h-4 w-4" aria-hidden />
@@ -103,7 +103,7 @@ export default function UserMenu() {
     try {
       await signOut();
       toast.success("À bientôt !");
-      router.replace("/core/auth/login");
+      router.replace("/auth/login");
       router.refresh();
     } catch {
       toast.error("Impossible de se déconnecter. Réessayez.");

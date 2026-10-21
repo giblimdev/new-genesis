@@ -1,38 +1,62 @@
-// lib/validations/auth.ts
 /*
-  role:           Schémas Zod pour l'authentification : inscription,
-                  connexion, mot de passe oublié, réinitialisation,
-                  changement de mot de passe. Source unique de vérité
-                  pour la validation des entrées.
+path :           lib/validations/auth.ts
+tag :            ["auth", "validation", "zod", "password", "generic"]
+projectId:       new-genesis
+type:            config
+generic:         true
 
-  flow:           Importé par les formulaires (react-hook-form) et
-                  réutilisable côté serveur. Les schémas sont utilisés
-                  via zodResolver dans chaque formulaire.
+role:            Schémas Zod pour l'authentification : inscription, connexion,
+                 mot de passe oublié, réinitialisation, changement de mot de
+                 passe. Source unique de vérité pour la validation des entrées.
+                 Exporte aussi PASSWORD_RULES, PasswordStrength et
+                 getPasswordStrength utilisés par le composant
+                 <PasswordStrength /> côté UI.
 
-  imports:        zod.
+flow:            Module TypeScript pur → export des schémas Zod (register,
+                 login, forgotPassword, resetPassword, changePassword), de
+                 PASSWORD_RULES, de getPasswordStrength et des types inférés.
+                 Aucun état, aucun effet.
 
-  structure:      - interface PasswordRule + PASSWORD_RULES
-                  - interface PasswordStrength + getPasswordStrength
-                  - imageField (URL http(s) OU data URL base64)
-                  - registerSchema + RegisterInput
-                  - loginSchema + LoginInput
-                  - forgotPasswordSchema + ForgotPasswordInput
-                  - resetPasswordSchema + ResetPasswordInput
-                  - changePasswordSchema + ChangePasswordInput
+ecosystem:       Auth = [
+                   "@/app/api/auth/[...all]/route.ts",
+                   "@/app/auth/layout.tsx",
+                   "@/app/auth/login/LoginForm.tsx",
+                   "@/app/auth/login/page.tsx",
+                   "@/app/auth/register/RegisterForm.tsx",
+                   "@/app/auth/register/page.tsx",
+                   "@/app/auth/welcome/page.tsx",
+                   "@/components/auth/PasswordInput.tsx",
+                   "@/components/auth/PasswordStrength.tsx",
+                   "@/lib/auth/auth-client.ts",
+                   "@/lib/auth/auth.ts",
+                   "@/lib/auth/session.ts",
+                   "@/lib/validations/auth.ts",
+                 ]
 
-  ecosysteme:     Auth
+relatedFiles:    ["@/app/auth/login/LoginForm.tsx",
+                  "@/app/auth/register/RegisterForm.tsx",
+                  "@/components/auth/PasswordStrength.tsx"]
 
-  usedBy:         LoginForm, RegisterForm, ForgotPasswordForm,
-                  ResetPasswordForm, PasswordForm.
+imports:         ["zod"]
 
-  notes:          - imageField accepte deux formats :
-                    · URL http(s) — ex. https://exemple.com/avatar.jpg
-                    · data URL base64 — ex. data:image/png;base64,iVBOR…
-                  - Un champ vide est transformé en undefined pour que
-                    BetterAuth reçoive null côté base de données.
-                  - Les schémas réutilisent les mêmes règles pour
-                    register et resetPassword (confirmation du mot de
-                    passe).
+exports:         ["registerSchema", "RegisterInput",
+                  "loginSchema", "LoginInput",
+                  "forgotPasswordSchema", "ForgotPasswordInput",
+                  "resetPasswordSchema", "ResetPasswordInput",
+                  "changePasswordSchema", "ChangePasswordInput",
+                  "PASSWORD_RULES", "PasswordRule",
+                  "PasswordStrength", "getPasswordStrength"]
+
+useBy:           ["@/app/auth/login/LoginForm.tsx",
+                  "@/app/auth/register/RegisterForm.tsx",
+                  "@/components/auth/PasswordStrength.tsx"]
+
+userStories:     ["*en tant qu'utilisateur je veux une validation d'authentification cohérente"]
+
+status:          done
+pathChecked:     ✔true
+metaDataChecked: ✔true
+scriptChecked:   ✔true
 */
 
 import { z } from "zod";

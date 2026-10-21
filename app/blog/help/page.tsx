@@ -1,605 +1,757 @@
 /*
 path :           app/blog/help/page.tsx
-tag :            ["blog", "help", "guide", "documentation", "mode-emploi"]
+tag :            ["blog", "help", "how-to", "tutorial", "guide", "mode-emploi", "storage"]
 projectId:       new-genesis
 type:            page
 generic:         false
 
-role:            Mode d'emploi du module Blog. Documente le blog tel qu'il
-                 sera utilisé une fois le module livré : les 6 personas
-                 utilisateurs (lecteur anonyme, lecteur connecté, auteur,
-                 modérateur/éditeur, propriétaire de groupe, administrateur),
-                 les concepts clés (taxonomie 3 niveaux, statut éditorial,
-                 visibilité, likes, favoris, groupes, notifications) et les
-                 limites assumées du MVP (soft delete, plafonds, recherche
-                 en mémoire). Aligné sur les 15 features et 7 personas de
-                 data/blog.json. Sert de point d'entrée pédagogique depuis
-                 la nav ("Blog Help"). Server Component pur (aucune donnée
-                 dynamique, aucun Suspense). Les routes citées sont celles
-                 prévues par les US du JSON ; elles peuvent renvoyer 404
-                 tant que le module n'est pas livré.
+role:            Mode d'emploi du Blog — 26 tutoriels « comment faire X ».
+                 Contrairement à une page de référence (personas + concepts
+                 + routes), cette page est un GUIDE PRATIQUE : chaque
+                 tutoriel est numéroté, affiche une suite d'étapes concrètes
+                 (cliquer sur X, aller sur Y, remplir Z), et pointe vers la
+                 page réelle où l'action se fait via un CTA « Faire
+                 maintenant ». 5 audiences regroupent les tutoriels :
+                 Tous (3), Compte (7), Communauté (6), Auteur (7), Admin (3).
+                 Une section finale « Stockage & persistance » documente
+                 le modèle de persistance pour les développeurs (pipeline,
+                 deux brouillons, garanties de data/blog.json). Aucune
+                 donnée dynamique, aucun fetch : page statique. Mobile
+                 first : grille 1 / 2 colonnes, étapes verticales.
 
-flow:            Server Component statique → rend hero + index des 6
-                 personas (grille de cartes cliquables) + 6 sections
-                 détaillées (par persona, avec parcours typique et routes
-                 concernées) + glossaire des concepts + encart "Limites du
-                 MVP" + lien vers genesis/help pour l'outillage dev.
+flow:            Server Component → Hero + sommaire 5 ancres → pour chaque
+                 audience : header coloré + grille de <TutorialCard />
+                 (numéro, icône, badge, summary, étapes numérotées, tip ou
+                 warning, CTA) → <section id="dev"> Stockage & persistance
+                 (pipeline, deux brouillons, garanties) → footer « Et
+                 après ? ». Aucun état, aucun effet.
 
 ecosystem:       Blog = [
+                   "@/app/blog/[slug]/page.tsx",
+                   "@/app/blog/articles/ArticleRow.tsx",
+                   "@/app/blog/articles/[id]/edit/page.tsx",
+                   "@/app/blog/articles/new/page.tsx",
+                   "@/app/blog/articles/page.tsx",
+                   "@/app/blog/community/[groupSlug]/[discussionId]/page.tsx",
+                   "@/app/blog/community/[groupSlug]/page.tsx",
+                   "@/app/blog/community/[groupSlug]/requests/page.tsx",
+                   "@/app/blog/community/new/page.tsx",
+                   "@/app/blog/community/page.tsx",
                    "@/app/blog/help/page.tsx",
+                   "@/app/blog/notifications/page.tsx",
                    "@/app/blog/page.tsx",
+                   "@/app/blog/search/page.tsx",
+                   "@/app/blog/setup/page.tsx",
+                   "@/app/blog/tag/[slug]/page.tsx",
+                   "@/app/blog/taxonomy/page.tsx",
+                   "@/app/blog/theme/[slug]/[category]/[subCategory]/page.tsx",
+                   "@/app/blog/theme/[slug]/[category]/page.tsx",
+                   "@/app/blog/theme/[slug]/page.tsx",
+                   "@/app/blog/user/articles/page.tsx",
+                   "@/app/blog/user/favorites/page.tsx",
                  ]
 
 relatedFiles:    ["@/app/blog/page.tsx",
-                  "@/app/genesis/help/page.tsx",
+                  "@/app/page.tsx",
+                  "@/app/blog/lib/storage.ts",
                   "@/app/layout.tsx"]
 
-imports:         ["next/link", "lucide-react"]
+imports:         ["next", "next/link", "lucide-react"]
 
-exports:         ["default BlogHelpPage"]
+exports:         ["default BlogHelpPage", "metadata"]
 
 useBy:           []
 
-userStories:     ["*en tant qu'utilisateur je veux comprendre comment fonctionnera le blog",
-                  "*en tant que lecteur je veux savoir ce que je peux faire sans compte et avec un compte",
-                  "*en tant qu'auteur je veux connaître le parcours de publication"]
+userStories:     ["*en tant qu'utilisateur je veux un guide pas-à-pas pour faire chaque action du blog",
+                  "*en tant que développeur je veux comprendre comment un article est persisté"]
 
-status:          planned
+status:          wip
 pathChecked:     ✘false
 metaDataChecked: ✘false
 scriptChecked:   ✘false
 */
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
   Bell,
-  BookOpen,
   Bookmark,
+  BookOpen,
   CheckCircle2,
-  ChevronRight,
-  ClipboardList,
-  Eye,
+  Code2,
+  Database,
   FileText,
-  FolderKanban,
   Heart,
-  Info,
+  Key,
   Layers,
   Lightbulb,
   Lock,
+  LogIn,
   MessageSquare,
+  Pencil,
+  Plus,
   Search,
-  Shield,
+  ShieldCheck,
   Sparkles,
   Tag,
   TriangleAlert,
   User,
+  UserPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
+/*  Métadonnées                                                        */
+/* ------------------------------------------------------------------ */
+
+export const metadata: Metadata = {
+  title: "Mode d'emploi · Blog",
+  description:
+    "26 tutoriels pas-à-pas pour maîtriser le blog. Et un guide développeur sur le stockage (data/blog.json, mutex, atomic write, Zod).",
+};
+
+/* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-interface PersonaDoc {
-  readonly id: string;
-  readonly name: string;
-  readonly tagline: string;
-  readonly icon: LucideIcon;
-  readonly accent: string;
-  readonly canDo: readonly string[];
-  readonly cannotDo: readonly string[];
-  readonly routes: readonly { readonly path: string; readonly label: string }[];
+type Audience = "Tous" | "Compte" | "Communauté" | "Auteur" | "Admin";
+
+interface Step {
+  readonly text: string;
+  readonly hint?: string;
 }
 
-interface ConceptDoc {
+interface Tutorial {
   readonly id: string;
+  readonly num: number;
   readonly title: string;
+  readonly audience: Audience;
   readonly icon: LucideIcon;
   readonly accent: string;
   readonly summary: string;
-  readonly details: readonly string[];
+  readonly steps: readonly Step[];
+  readonly link?: { readonly href: string; readonly label: string };
+  readonly tip?: string;
+  readonly warning?: string;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Personas — alignés sur data/blog.json                              */
+/*  Config des audiences                                               */
 /* ------------------------------------------------------------------ */
 
-const PERSONAS: readonly PersonaDoc[] = [
+interface AudienceConfig {
+  readonly id: Audience;
+  readonly label: string;
+  readonly description: string;
+  readonly icon: LucideIcon;
+  readonly accent: string;
+}
+
+const AUDIENCES: readonly AudienceConfig[] = [
   {
-    id: "lecteur-anonyme",
-    name: "Lecteur anonyme",
-    tagline: "Visiteur sans compte",
+    id: "Tous",
+    label: "Tous",
+    description: "Actions accessibles sans compte.",
+    icon: BookOpen,
+    accent: "chart-1",
+  },
+  {
+    id: "Compte",
+    label: "Compte connecté",
+    description: "Interagir avec les articles et la communauté.",
     icon: User,
+    accent: "chart-2",
+  },
+  {
+    id: "Communauté",
+    label: "Communauté",
+    description: "Groupes, discussions et modération.",
+    icon: Users,
     accent: "chart-3",
-    canDo: [
-      "Lire les articles publiés et publics",
-      "Naviguer par thème, catégorie, sous-catégorie et tag",
-      "Utiliser la recherche plein texte (titre + résumé)",
-      "Partager un article par lien",
-      "Voir les compteurs de likes et le nombre de commentaires",
-    ],
-    cannotDo: [
-      "Commenter, liker ou sauvegarder en favoris (compte requis)",
-      "Rejoindre un groupe de discussion",
-      "Recevoir des notifications",
-    ],
-    routes: [
-      { path: "/blog", label: "Index public" },
-      { path: "/blog/[slug]", label: "Lire un article" },
-      { path: "/blog/theme/[slug]", label: "Listing par thème" },
-      { path: "/blog/tag/[slug]", label: "Listing par tag" },
-      { path: "/blog/search", label: "Recherche" },
-    ],
   },
   {
-    id: "lecteur-connecte",
-    name: "Lecteur connecté",
-    tagline: "Utilisateur authentifié",
-    icon: User,
+    id: "Auteur",
+    label: "Auteur",
+    description: "Écrire, structurer et publier des articles.",
+    icon: Pencil,
+    accent: "chart-4",
+  },
+  {
+    id: "Admin",
+    label: "Administrateur",
+    description: "Bootstrap, taxonomie et tags.",
+    icon: ShieldCheck,
     accent: "chart-5",
-    canDo: [
-      "Tout ce que peut faire le lecteur anonyme",
-      "Commenter un article et répondre à un commentaire (arbre jusqu'à 5 niveaux)",
-      "Liker un article et un commentaire",
-      "Sauvegarder un article en favori, non classé ou dans un dossier nommé",
-      "Rejoindre un groupe public ; demander à rejoindre un groupe privé",
-      "Recevoir des notifications in-app (réponse, invitation, approbation, nouvelle discussion)",
-    ],
-    cannotDo: [
-      "Créer ou modifier un article (rôle Auteur requis)",
-      "Modérer un commentaire (rôle Modérateur / Éditeur requis)",
-      "Créer un groupe ? Non — un groupe peut être créé par tout membre connecté (rôle owner implicite)",
-    ],
-    routes: [
-      { path: "/blog/[slug]", label: "Lire + commenter + liker + favori" },
-      { path: "/blog/user/favorites", label: "Mes favoris + dossiers" },
-      { path: "/blog/community", label: "Groupes" },
-      { path: "/blog/notifications", label: "Notifications" },
-    ],
   },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Les 26 tutoriels                                                   */
+/* ------------------------------------------------------------------ */
+
+const TUTORIALS: readonly Tutorial[] = [
+  /* --------------------------- TOUS (3) --------------------------- */
   {
-    id: "auteur",
-    name: "Auteur",
-    tagline: "Créateur de contenu",
+    id: "lire-un-article",
+    num: 1,
+    title: "Lire un article",
+    audience: "Tous",
     icon: FileText,
     accent: "chart-1",
-    canDo: [
-      "Créer, éditer, lister et supprimer ses articles",
-      "Classer un article dans la taxonomie (thème → catégorie → sous-catégorie) et choisir des tags",
-      "Rédiger un résumé dédié et une couverture",
-      "Attacher une galerie ordonnée de médias (image, vidéo, audio, document, embed) avec alt, caption, crédit",
-      "Publier (draft → published) ou archiver (→ archived)",
-      "Choisir la visibilité (public / private / unlisted)",
-      "Prévisualiser un article en brouillon (?preview=1)",
-      "Suivre le nombre de vues",
+    summary: "Accéder à un article et lire son contenu structuré.",
+    steps: [
+      { text: "Aller sur /blog — la grille des articles s'affiche." },
+      { text: "Cliquer sur une carte d'article pour ouvrir sa page." },
+      { text: "Faire défiler pour lire le contenu (titres, images, code, embeds)." },
+      {
+        text: "Utiliser la table des matières (sommaire à droite sur desktop, déroulant sur mobile).",
+        hint: "Cliquer sur une entrée = saut direct au titre correspondant.",
+      },
     ],
-    cannotDo: [
-      "Publier à la place d'un modérateur (mais l'auteur peut publier son propre article)",
-      "Modifier la taxonomie globale (rôle Administrateur requis pour Thème / Catégorie / Sous-catégorie)",
-    ],
-    routes: [
-      { path: "/blog/admin/articles/new", label: "Créer un article" },
-      { path: "/blog/admin/articles/[id]/edit", label: "Éditer un article" },
-      { path: "/blog/[slug]?preview=1", label: "Prévisualiser un brouillon" },
-    ],
+    link: { href: "/blog", label: "Voir les articles" },
   },
   {
-    id: "moderateur",
-    name: "Modérateur / Éditeur",
-    tagline: "Contrôle éditorial",
-    icon: Shield,
-    accent: "chart-4",
-    canDo: [
-      "Valider et publier des brouillons d'auteurs",
-      "Archiver un article (sans le supprimer, sans perdre commentaires / likes / favoris)",
-      "Modérer les commentaires d'article en soft delete (masquage non destructif)",
-      "Gérer la taxonomie globale",
-      "Intervenir dans les discussions de groupe (en tant que membre)",
+    id: "chercher-un-article",
+    num: 2,
+    title: "Chercher un article",
+    audience: "Tous",
+    icon: Search,
+    accent: "chart-1",
+    summary: "Trouver un article par mot-clé dans le titre, résumé ou paragraphes.",
+    steps: [
+      { text: "Aller sur /blog/search." },
+      { text: "Saisir un mot-clé dans le champ (insensible à la casse et aux accents)." },
+      { text: "Cliquer « Rechercher » ou appuyer sur Entrée." },
+      {
+        text: "Utiliser les URL ?tag=…&theme=…&author=…&from=…&to=… pour combiner des filtres.",
+        hint: "L'URL est partageable : copier-coller pour envoyer à quelqu'un.",
+      },
     ],
-    cannotDo: [
-      "Supprimer définitivement un article (l'archivage est la voie normale)",
-      "Promouvoir d'autres admins (rôle Administrateur requis)",
-    ],
-    routes: [
-      { path: "/blog/admin/articles", label: "File d'articles à modérer" },
-      { path: "/blog/[slug]", label: "Commentaires modérables" },
-    ],
+    link: { href: "/blog/search", label: "Lancer une recherche" },
   },
   {
-    id: "proprietaire-groupe",
-    name: "Propriétaire de groupe",
-    tagline: "Animateur de communauté",
-    icon: Users,
-    accent: "chart-2",
-    canDo: [
-      "Créer un groupe (nom, description, couverture, visibilité public / private / unlisted)",
-      "Devenir automatiquement owner du groupe",
-      "Inviter des membres et gérer les demandes d'adhésion (approuver / refuser)",
-      "Attribuer le rôle moderator à un membre actif",
-      "Bannir un membre (status=banned, ne peut plus poster)",
-      "Ouvrir des discussions et modérer les fils (soft delete des réponses)",
-      "Recevoir une notification pour chaque demande d'adhésion",
-    ],
-    cannotDo: [
-      "Se retirer soi-même du groupe (owner non bannissable, transfert non prévu en v1)",
-      "Créer un article éditorial via le groupe (les articles restent hors groupe)",
-    ],
-    routes: [
-      { path: "/blog/community/new", label: "Créer un groupe" },
-      { path: "/blog/community/[groupSlug]", label: "Page du groupe" },
-      { path: "/blog/community/[groupSlug]/requests", label: "Demandes d'adhésion" },
-      { path: "/blog/community/[groupSlug]/[discussionId]", label: "Discussion" },
-    ],
-  },
-  {
-    id: "administrateur",
-    name: "Administrateur",
-    tagline: "Supervision globale",
-    icon: FolderKanban,
-    accent: "chart-3",
-    canDo: [
-      "CRUD Thème / Catégorie / Sous-catégorie (taxonomie globale)",
-      "CRUD Tags transverses",
-      "Surveiller les signalements et les contenus modérés",
-      "Promouvoir un utilisateur au rôle administrateur",
-      "Exporter les données du blog",
-      "Accéder à la page de bootstrap (/blog/admin/setup) pour promouvoir le premier admin",
-    ],
-    cannotDo: [
-      "Bypasser les règles de modération (soft delete, owner non bannissable)",
-    ],
-    routes: [
-      { path: "/blog/admin/setup", label: "Bootstrap admin" },
-      { path: "/blog/admin/taxonomy", label: "Gérer la taxonomie" },
-    ],
-  },
-];
-
-/* ------------------------------------------------------------------ */
-/*  Concepts clés                                                      */
-/* ------------------------------------------------------------------ */
-
-const CONCEPTS: readonly ConceptDoc[] = [
-  {
-    id: "taxonomie",
-    title: "Taxonomie 3 niveaux + tags",
+    id: "naviguer-taxonomie",
+    num: 3,
+    title: "Naviguer par thème ou tag",
+    audience: "Tous",
     icon: Layers,
     accent: "chart-1",
-    summary:
-      "Thème → Catégorie → Sous-catégorie (hiérarchie stricte) + tags libres (transverses).",
-    details: [
-      "Un article est rattaché à 1 thème, 0 ou 1 catégorie, 0 ou 1 sous-catégorie.",
-      "Un article peut porter plusieurs tags (transverses, dédoublonnés case-insensitive).",
-      "La suppression d'un thème échoue si des catégories y sont rattachées. La suppression d'une sous-catégorie laisse l'article avec un subCategoryId orphelin (affichage fallback).",
-      "Les slugs sont uniques par niveau : générés via slugifyWithFallback + findFreeSlug.",
+    summary: "Parcourir les articles par thème, catégorie, sous-catégorie ou tag.",
+    steps: [
+      { text: "Sur /blog, cliquer sur une pastille de thème en haut de page." },
+      {
+        text: "Sur la page thème, cliquer sur une catégorie puis une sous-catégorie pour affiner.",
+      },
+      {
+        text: "Depuis un article, cliquer sur un tag pour voir tous les articles associés.",
+        hint: "Chaque tag a sa propre page /blog/tag/<slug>.",
+      },
     ],
+    link: { href: "/blog", label: "Voir les thèmes" },
   },
+
+  /* -------------------------- COMPTE (7) -------------------------- */
   {
-    id: "statut-editorial",
-    title: "Statut éditorial",
-    icon: ClipboardList,
+    id: "creer-compte",
+    num: 4,
+    title: "Créer un compte",
+    audience: "Compte",
+    icon: UserPlus,
     accent: "chart-2",
-    summary:
-      "draft (brouillon) → published (publié) → archived (archivé).",
-    details: [
-      "Un article draft n'apparaît pas dans les listings publics. Il est visible par son auteur et les admins (preview).",
-      "Publier renseigne publishedAt (une seule fois). Un article published reste éditable sans perdre publishedAt.",
-      "Archiver ne supprime pas : les commentaires, likes et favoris existants sont préservés.",
-      "Un article archived n'apparaît plus dans les listings, mais reste accessible par URL directe si visibility=unlisted.",
+    summary: "S'inscrire pour interagir (commenter, liker, sauvegarder).",
+    steps: [
+      { text: "Aller sur /core/auth/register." },
+      {
+        text: "Remplir nom, email, mot de passe (indicateur de force en direct).",
+        hint: "8 caractères min, au moins une majuscule, une minuscule et un chiffre.",
+      },
+      { text: "Ajouter une photo de profil (optionnel, 2 Mo max)." },
+      { text: "Cliquer « Créer mon compte »." },
     ],
+    link: { href: "/core/auth/register", label: "Créer un compte" },
   },
   {
-    id: "visibilite",
-    title: "Visibilité",
-    icon: Eye,
-    accent: "chart-5",
-    summary: "public (référencé) / unlisted (non listé) / private (privé).",
-    details: [
-      "public : apparaît dans les listings et les pages taxonomiques, indexable.",
-      "unlisted : accessible uniquement par URL directe (partage par lien), pas de listing.",
-      "private : accessible à l'auteur et aux admins uniquement.",
-      "Le statut et la visibilité sont indépendants : un article published+unlisted existe et est accessible par lien, mais invisible dans les listings.",
+    id: "se-connecter",
+    num: 5,
+    title: "Se connecter",
+    audience: "Compte",
+    icon: LogIn,
+    accent: "chart-2",
+    summary: "Se connecter avec son email et mot de passe.",
+    steps: [
+      { text: "Aller sur /core/auth/login." },
+      { text: "Saisir email et mot de passe." },
+      { text: "Cliquer « Se connecter » — redirection automatique vers le blog." },
     ],
+    link: { href: "/core/auth/login", label: "Se connecter" },
   },
   {
-    id: "likes",
-    title: "Likes",
+    id: "commenter-article",
+    num: 6,
+    title: "Commenter un article",
+    audience: "Compte",
+    icon: MessageSquare,
+    accent: "chart-2",
+    summary: "Ajouter un commentaire racine en bas d'un article.",
+    steps: [
+      { text: "Ouvrir un article (cliquer sur une carte depuis /blog)." },
+      { text: "Descendre jusqu'à la section « Commentaires »." },
+      { text: "Saisir son commentaire dans la zone de texte." },
+      {
+        text: "Cliquer « Envoyer » — un toast confirme la publication.",
+        hint: "Le commentaire apparaît immédiatement dans l'arbre.",
+      },
+    ],
+    link: { href: "/blog", label: "Voir un article" },
+  },
+  {
+    id: "repondre-commentaire",
+    num: 7,
+    title: "Répondre à un commentaire",
+    audience: "Compte",
+    icon: MessageSquare,
+    accent: "chart-2",
+    summary: "Répondre à un commentaire existant (imbrication max 5 niveaux).",
+    steps: [
+      { text: "Sous un commentaire, cliquer sur « Répondre »." },
+      { text: "Un formulaire s'ouvre en dessous — saisir la réponse." },
+      { text: "Cliquer « Envoyer » — la réponse s'imbrique sous le commentaire parent." },
+    ],
+    tip: "Répondre à un commentaire notifie son auteur (notification « reply »).",
+    link: { href: "/blog", label: "Voir un article" },
+  },
+  {
+    id: "liker",
+    num: 8,
+    title: "Liker un article ou un commentaire",
+    audience: "Compte",
     icon: Heart,
-    accent: "chart-5",
-    summary:
-      "Compteur d'appréciations par article et par commentaire. Un like par utilisateur, par cible.",
-    details: [
-      "Un like est un userId dans un tableau likedBy[] de la cible (article ou commentaire).",
-      "Toggle : 1er clic ajoute, 2e clic retire. L'unicité est garantie par construction (pas de doublon dans le tableau).",
-      "Le compteur de likes est la longueur du tableau likedBy[]. Affiché sur l'article et à côté de chaque commentaire.",
-      "Un utilisateur peut liker son propre commentaire (pas de restriction).",
+    accent: "chart-2",
+    summary: "Ajouter ou retirer un like (bouton cœur).",
+    steps: [
+      {
+        text: "Cliquer sur le bouton cœur (dans l'en-tête de l'article ou sous un commentaire).",
+        hint: "Le compteur s'incrémente immédiatement (mise à jour optimiste).",
+      },
+      { text: "Re-cliquer sur le cœur pour retirer le like." },
     ],
+    link: { href: "/blog", label: "Voir un article" },
   },
   {
-    id: "favoris",
-    title: "Favoris + dossiers",
+    id: "sauvegarder-article",
+    num: 9,
+    title: "Sauvegarder un article en favori",
+    audience: "Compte",
     icon: Bookmark,
     accent: "chart-2",
-    summary:
-      "Sauvegarde d'articles pour plus tard, classés dans des dossiers nommés ou laissés non classés.",
-    details: [
-      "Un article sauvegardé vit soit dans unfiledFavorites[] (non classé), soit dans un dossier.favoriteFolders[].articleIds[].",
-      "Un article ne peut figurer qu'à UN seul endroit dans vos favoris (déplacement d'id, jamais duplication).",
-      "Supprimer un dossier remet ses articleIds dans les non-classés (aucun favori perdu).",
-      "La page /blog/user/favorites liste les dossiers triés par order, et sous chacun les articles correspondants.",
+    summary: "Enregistrer un article pour le relire plus tard.",
+    steps: [
+      { text: "Ouvrir un article." },
+      { text: "Cliquer sur le bouton « Sauvegarder » (icône bookmark) dans l'en-tête." },
+      {
+        text: "L'article est ajouté aux favoris non classés.",
+        hint: "Un toast confirme et le bouton devient « Sauvegardé ».",
+      },
     ],
+    link: { href: "/blog/user/favorites", label: "Voir mes favoris" },
   },
   {
-    id: "commentaires",
-    title: "Commentaires imbriqués",
+    id: "organiser-favoris",
+    num: 10,
+    title: "Organiser ses favoris en dossiers",
+    audience: "Compte",
+    icon: Bookmark,
+    accent: "chart-2",
+    summary: "Créer, renommer ou supprimer des dossiers pour classer ses favoris.",
+    steps: [
+      { text: "Aller sur /blog/user/favorites." },
+      { text: "Cliquer « Nouveau dossier » — saisir un nom, valider." },
+      {
+        text: "Pour renommer / supprimer un dossier, utiliser les boutons de son en-tête.",
+        hint: "Supprimer un dossier remet ses articles en non classés — aucun favori perdu.",
+      },
+    ],
+    tip: "Un article ne peut être que dans UN SEUL endroit à la fois.",
+    link: { href: "/blog/user/favorites", label: "Gérer mes favoris" },
+  },
+
+  /* ------------------------ COMMUNAUTÉ (6) ------------------------ */
+  {
+    id: "rejoindre-groupe-public",
+    num: 11,
+    title: "Rejoindre un groupe public",
+    audience: "Communauté",
+    icon: Users,
+    accent: "chart-3",
+    summary: "Adhérer immédiatement à un groupe public.",
+    steps: [
+      { text: "Aller sur /blog/community — la liste des groupes s'affiche." },
+      { text: "Cliquer sur un groupe public pour ouvrir sa page." },
+      { text: "Cliquer sur « Rejoindre » — l'adhésion est immédiate." },
+    ],
+    link: { href: "/blog/community", label: "Voir les groupes" },
+  },
+  {
+    id: "rejoindre-groupe-prive",
+    num: 12,
+    title: "Demander à rejoindre un groupe privé",
+    audience: "Communauté",
+    icon: Users,
+    accent: "chart-3",
+    summary: "Envoyer une demande d'adhésion à un groupe privé.",
+    steps: [
+      { text: "Ouvrir le groupe privé (accessible via un lien direct)." },
+      { text: "Cliquer sur « Demander à rejoindre »." },
+      {
+        text: "Le propriétaire reçoit une notification et peut approuver / refuser.",
+        hint: "Votre statut passe à « pending » jusqu'à réponse.",
+      },
+    ],
+    link: { href: "/blog/community", label: "Voir les groupes" },
+  },
+  {
+    id: "creer-groupe",
+    num: 13,
+    title: "Créer un groupe",
+    audience: "Communauté",
+    icon: Plus,
+    accent: "chart-3",
+    summary: "Créer un espace (public, privé ou non listé).",
+    steps: [
+      { text: "Aller sur /blog/community/new." },
+      { text: "Remplir le nom, la description (optionnelle) et la visibilité." },
+      {
+        text: "Cliquer « Créer le groupe » — vous en devenez owner automatiquement.",
+        hint: "En tant qu'owner : vous ne pouvez pas être banni ni quitter le groupe.",
+      },
+    ],
+    link: { href: "/blog/community/new", label: "Créer un groupe" },
+  },
+  {
+    id: "gerer-demandes",
+    num: 14,
+    title: "Approuver ou refuser les demandes d'adhésion",
+    audience: "Communauté",
+    icon: CheckCircle2,
+    accent: "chart-3",
+    summary: "Gérer les demandes d'adhésion (owner ou modérateur uniquement).",
+    steps: [
+      { text: "Ouvrir la page du groupe dont vous êtes owner ou modérateur." },
+      { text: "Cliquer sur « Demandes » (visible dans les actions du groupe)." },
+      {
+        text: "Pour chaque demande : « Approuver » (statut actif) ou « Refuser » (supprimée).",
+        hint: "Le demandeur reçoit une notification à l'approbation.",
+      },
+    ],
+    link: { href: "/blog/community", label: "Voir mes groupes" },
+  },
+  {
+    id: "ouvrir-discussion",
+    num: 15,
+    title: "Ouvrir une discussion",
+    audience: "Communauté",
     icon: MessageSquare,
     accent: "chart-3",
-    summary:
-      "Arbre de commentaires avec réponses imbriquées, profondeur max 5 niveaux.",
-    details: [
-      "Chaque commentaire peut recevoir des réponses (replies[] récursif), jusqu'à 5 niveaux d'imbrication.",
-      "Suppression non destructive : un commentaire supprimé (deletedAt non null) affiche « Commentaire supprimé » à la place du contenu.",
-      "Les réponses d'un commentaire supprimé restent visibles, avec mention « en réponse à un commentaire supprimé ».",
-      "Le même modèle d'arbre est réutilisé sous les discussions de groupe (posts[]).",
+    summary: "Lancer un fil de discussion dans un groupe dont on est membre actif.",
+    steps: [
+      { text: "Ouvrir la page du groupe (vous devez être membre actif)." },
+      { text: "Descendre jusqu'à la section « Ouvrir une discussion »." },
+      { text: "Saisir un titre et un contenu." },
+      {
+        text: "Cliquer « Ouvrir la discussion » — tous les membres actifs sont notifiés.",
+        hint: "La discussion apparaît en haut de la liste.",
+      },
     ],
+    link: { href: "/blog/community", label: "Voir les groupes" },
   },
   {
-    id: "groupes",
-    title: "Groupes de discussion",
-    icon: Users,
+    id: "repondre-discussion",
+    num: 16,
+    title: "Répondre dans une discussion",
+    audience: "Communauté",
+    icon: MessageSquare,
+    accent: "chart-3",
+    summary: "Poster une réponse racine ou répondre à un post existant.",
+    steps: [
+      { text: "Ouvrir une discussion depuis la page du groupe." },
+      {
+        text: "Pour une réponse racine : utiliser le formulaire en bas.",
+      },
+      {
+        text: "Pour répondre à un post : cliquer « Répondre » sous le post visé.",
+        hint: "Réponses imbriquées max 5 niveaux.",
+      },
+      { text: "Cliquer « Envoyer » — la réponse apparaît immédiatement." },
+    ],
+    tip: "Répondre à un post notifie son auteur (notification « reply »).",
+    link: { href: "/blog/community", label: "Voir les groupes" },
+  },
+
+  /* --------------------------- AUTEUR (7) ------------------------- */
+  {
+    id: "ecrire-article",
+    num: 17,
+    title: "Écrire un nouvel article",
+    audience: "Auteur",
+    icon: Pencil,
     accent: "chart-4",
-    summary:
-      "Espaces thématiques (public / private / unlisted) avec owner, membres, rôles et discussions.",
-    details: [
-      "Visibilité public : join immédiat. Private : demande à approuver par l'owner. Unlisted : accessible par lien direct uniquement.",
-      "Rôles : owner (créateur, non bannissable), moderator (modération), member (participe).",
-      "Statuts de membre : active (participe), pending (demande en attente), banned (bloqué).",
-      "Un membre avec status=banned ne peut plus poster ni créer de discussion.",
-      "Chaque groupe contient des discussions (fil + réponses imbriquées).",
+    summary: "Créer un article complet avec métadonnées, taxonomie et contenu.",
+    steps: [
+      { text: "Aller sur /blog/articles/new (CTA visible si admin ou author)." },
+      {
+        text: "Remplir le titre (3-200 car.) et le résumé (20-500 car.).",
+      },
+      { text: "Ajouter une couverture (glisser-déposer ou Ctrl+V)." },
+      {
+        text: "Choisir le thème, puis catégorie et sous-catégorie (dépendants), et les tags.",
+      },
+      {
+        text: "Structurer le contenu avec le BlockEditor (bouton « Ajouter un bloc »).",
+        hint: "Le brouillon est sauvegardé en sessionStorage (24 h) automatiquement.",
+      },
+      { text: "Choisir le statut (Brouillon par défaut) puis « Créer l'article »." },
     ],
+    warning:
+      "Le CTA « Nouvel article » n'est visible que pour les rôles admin et author. Un user standard ne le voit pas.",
+    link: { href: "/blog/articles/new", label: "Écrire un article" },
   },
   {
-    id: "notifications",
-    title: "Notifications in-app",
-    icon: Bell,
-    accent: "chart-1",
-    summary:
-      "4 types : reply, group_invite, group_join_approved, group_new_discussion.",
-    details: [
-      "Cloche avec badge non-lu. Page /blog/notifications triée par createdAt DESC.",
-      "Un utilisateur n'est jamais notifié de ses propres actions (anti-auto-notification).",
-      "Les likes ne notifient pas (choix assumé pour éviter le bruit).",
-      "Plafond 200 entrées par utilisateur, purge automatique au-delà de 90 jours.",
-      "Notifs de type group_new_discussion : plafonnées à 200 destinataires par discussion, dédupliquées par membre.",
+    id: "ajouter-couverture",
+    num: 18,
+    title: "Ajouter une image de couverture",
+    audience: "Auteur",
+    icon: FileText,
+    accent: "chart-4",
+    summary: "Uploader une couverture (max 5 Mo, JPEG/PNG/WebP/GIF).",
+    steps: [
+      { text: "Dans le formulaire d'article, section « Métadonnées »." },
+      {
+        text: "Glisser une image dans la zone, cliquer pour choisir un fichier, ou coller avec Ctrl+V.",
+      },
+      {
+        text: "L'upload est immédiat (dans public/blog/articles/<année>/).",
+        hint: "Cliquer « Retirer » supprime le fichier du serveur.",
+      },
     ],
+    warning:
+      "SVG refusé (vecteur XSS). Formats acceptés : JPEG, PNG, WebP, GIF. Taille max 5 Mo.",
+    link: { href: "/blog/articles/new", label: "Écrire un article" },
   },
   {
-    id: "recherche",
-    title: "Recherche + filtres",
-    icon: Search,
-    accent: "chart-2",
-    summary:
-      "Recherche plein texte (titre + résumé) et filtres combinables (thème, catégorie, sous-catégorie, tag, auteur, période, featured).",
-    details: [
-      "Recherche en mémoire sur title + summary, insensible à la casse et aux accents.",
-      "Filtres combinables via query params (?theme=x&tag=y&author=z) → intersection des résultats.",
-      "L'URL est partageable (state dans les query params, pas dans un store).",
-      "Pagination 20 articles par page.",
-      "Pas d'index inversé en v1 : la recherche reste un `includes` filtré en mémoire.",
+    id: "structurer-contenu",
+    num: 19,
+    title: "Structurer le contenu en blocs",
+    audience: "Auteur",
+    icon: Layers,
+    accent: "chart-4",
+    summary: "Ajouter, éditer, déplacer et imbriquer les 8 types de blocs.",
+    steps: [
+      { text: "Section « Contenu » → cliquer « Ajouter un bloc à la racine »." },
+      {
+        text: "Choisir un type : Section, Paragraphe, Image, Vidéo, Audio, Code, Embed, Document.",
+      },
+      { text: "Remplir le formulaire du bloc puis « Enregistrer »." },
+      {
+        text: "Utiliser la toolbar (Éditer / Monter / Descendre / Indenter / Désindenter / Supprimer).",
+        hint: "Profondeur max 6 niveaux d'imbrication.",
+      },
     ],
+    tip: "Les blocs Section créent automatiquement la table des matières de l'article.",
+    link: { href: "/blog/articles/new", label: "Écrire un article" },
+  },
+  {
+    id: "classer-article",
+    num: 20,
+    title: "Classer un article (taxonomie + tags)",
+    audience: "Auteur",
+    icon: Tag,
+    accent: "chart-4",
+    summary: "Choisir le thème obligatoire, la catégorie et sous-catégorie optionnelles, et les tags.",
+    steps: [
+      { text: "Section « Taxonomie » du formulaire d'article." },
+      {
+        text: "Choisir un thème (obligatoire), puis une catégorie, puis une sous-catégorie.",
+        hint: "Catégorie et sous-catégorie se débloquent après la précédente.",
+      },
+      {
+        text: "Cocher les tags souhaités, ou cliquer « Nouveau tag » pour en créer un à la volée.",
+      },
+    ],
+    tip: "Le bouton « Gérer la taxonomie » ouvre /blog/taxonomy sans perdre le brouillon.",
+    link: { href: "/blog/articles/new", label: "Écrire un article" },
+  },
+  {
+    id: "publier-article",
+    num: 21,
+    title: "Publier un article",
+    audience: "Auteur",
+    icon: Sparkles,
+    accent: "chart-4",
+    summary: "Faire passer un article de brouillon à publié.",
+    steps: [
+      { text: "Ouvrir l'article (via /blog/user/articles ou /blog/articles)." },
+      { text: "Passer le statut à « Publié » puis Enregistrer." },
+      {
+        text: "Alternativement : cliquer « Publier » sur la ligne de l'article.",
+        hint: "publishedAt est renseigné une seule fois, jamais réinitialisé.",
+      },
+    ],
+    link: { href: "/blog/user/articles", label: "Gérer mes articles" },
+  },
+  {
+    id: "previsualiser-brouillon",
+    num: 22,
+    title: "Prévisualiser un brouillon",
+    audience: "Auteur",
+    icon: FileText,
+    accent: "chart-4",
+    summary: "Voir un article en brouillon comme s'il était publié.",
+    steps: [
+      {
+        text: "Depuis l'éditeur, cliquer « Aperçu » (ouvre dans un nouvel onglet).",
+      },
+      {
+        text: "L'URL contient ?preview=1 — seul l'auteur (et les admins) peut voir un brouillon.",
+      },
+    ],
+    tip: "Utile pour valider le rendu avant de passer le statut à « Publié ».",
+    link: { href: "/blog/user/articles", label: "Mes articles" },
+  },
+  {
+    id: "gerer-articles",
+    num: 23,
+    title: "Gérer mes articles",
+    audience: "Auteur",
+    icon: FileText,
+    accent: "chart-4",
+    summary: "Lister, éditer, publier, archiver, supprimer ses propres articles.",
+    steps: [
+      { text: "Aller sur /blog/user/articles — liste filtrée sur votre compte." },
+      {
+        text: "Tri automatique : brouillons → publiés → archivés, puis updatedAt DESC.",
+      },
+      {
+        text: "Chaque ligne a 4 actions : Éditer / Publier / Archiver / Supprimer.",
+        hint: "Supprimer demande une confirmation (AlertDialog).",
+      },
+    ],
+    link: { href: "/blog/user/articles", label: "Mes articles" },
+  },
+
+  /* --------------------------- ADMIN (3) -------------------------- */
+  {
+    id: "devenir-admin",
+    num: 24,
+    title: "Devenir le premier administrateur",
+    audience: "Admin",
+    icon: Key,
+    accent: "chart-5",
+    summary: "Bootstrap : si aucun admin n'existe, se promouvoir admin.",
+    steps: [
+      { text: "Se connecter avec un compte utilisateur." },
+      { text: "Aller sur /blog/setup." },
+      {
+        text: "Cliquer « Devenir administrateur ».",
+        hint: "Opération idempotente : une fois qu'un admin existe, le bouton disparaît.",
+      },
+    ],
+    warning:
+      "Variable ADMIN_EMAIL optionnelle : si définie, seuls les emails listés peuvent être promus par bootstrap.",
+    link: { href: "/blog/setup", label: "Bootstrap admin" },
+  },
+  {
+    id: "gerer-taxonomie",
+    num: 25,
+    title: "Gérer la taxonomie (thèmes / catégories / sous-catégories)",
+    audience: "Admin",
+    icon: Layers,
+    accent: "chart-5",
+    summary: "Créer, éditer, supprimer les 3 niveaux de la hiérarchie.",
+    steps: [
+      { text: "Aller sur /blog/taxonomy." },
+      {
+        text: "Pour créer un thème : « Nouveau thème » → nom, couleur, icône.",
+      },
+      {
+        text: "Ouvrir un thème (accordéon) puis « Ajouter une catégorie ».",
+      },
+      {
+        text: "Sous une catégorie, ajouter des sous-catégories.",
+        hint: "Suppression refusée si l'entité a des enfants (garde-fou).",
+      },
+    ],
+    warning:
+      "Supprimer un thème avec catégories (ou une catégorie avec sous-catégories) est refusé côté serveur.",
+    link: { href: "/blog/taxonomy", label: "Gérer la taxonomie" },
+  },
+  {
+    id: "gerer-tags",
+    num: 26,
+    title: "Gérer les tags transverses",
+    audience: "Admin",
+    icon: Tag,
+    accent: "chart-5",
+    summary: "Créer, éditer, supprimer les tags appliqués aux articles.",
+    steps: [
+      { text: "Aller sur /blog/taxonomy, descendre jusqu'à la section « Tags »." },
+      {
+        text: "« Nouveau tag » pour créer (nom + couleur optionnelle).",
+        hint: "Slug auto-généré, unicité insensible à la casse.",
+      },
+      {
+        text: "Pour un tag existant : icônes Éditer / Supprimer inline.",
+        hint: "Supprimer un tag le retire aussi de tous les articles.",
+      },
+    ],
+    link: { href: "/blog/taxonomy", label: "Gérer les tags" },
   },
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Limites du MVP                                                     */
+/*  Pipeline de stockage (pour la section développeur)                 */
 /* ------------------------------------------------------------------ */
 
-const LIMITS: readonly string[] = [
-  "Les fichiers médias (images, vidéos, documents) vivent dans /public/blog/ et sont référencés par chemin relatif. Aucun upload serveur en v1.",
-  "La recherche est en mémoire (title + summary). Pas de recherche full-text avancée, pas d'index inversé.",
-  "Toutes les données vivent dans data/blog.json. Une seule mutation à la fois (mutex applicatif), adapté à une démo à charge faible.",
-  "Pas de Markdown, pas de HTML arbitraire dans le contenu d'article. Contenu texte brut.",
-  "Pas d'email, pas de push navigateur. Notifications in-app uniquement.",
-  "Pas de préférences fines par type de notification en v1.",
-  "Un owner de groupe ne peut pas se retirer ni transférer la propriété en v1 (le owner reste actif tant que le groupe existe).",
-  "Le compteur de vues est incrémenté au plus une fois par session (cookie technique) — toléré en démo, non fiable par nature.",
-  "Les fichiers .env, package.json, next.config.* sont refusés en lecture/écriture par les outils Genesis (sécurité).",
+const STORAGE_PIPELINE: readonly string[] = [
+  "ArticleForm.tsx construit un FormData (title, summary, content JSON, …).",
+  "createArticleAction(formData) — Server Action — vérifie la session via requireBlogSession().",
+  "articleInputSchema.parse(raw) — validation Zod des champs d'entrée.",
+  "createArticle(userId, input) — service — appelle mutateBlog(fn).",
+  "mutateBlog : acquire() (mutex) → readBlog() → fn(doc) → blogDocumentSchema.parse() (re-validation complète) → writeAtomically() → release().",
+  "Écriture atomique : writeFile('blog.json.tmp') puis rename('blog.json') — POSIX atomique.",
+];
+
+const STORAGE_GUARANTEES: readonly string[] = [
+  "Mutex global : une seule mutation à la fois, aucune race condition.",
+  "Écriture atomique (.tmp + rename) : jamais de fichier à moitié écrit, même en cas de crash.",
+  "Validation Zod à la lecture ET à l'écriture : un blog.json corrompu est refusé au chargement, un document invalide est refusé avant écriture.",
+  "schemaVersion = 2 (BLOG_SCHEMA_VERSION) : migrations futures par version de schéma.",
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Carte de persona (index)                                           */
+/*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function PersonaCard({ persona }: { readonly persona: PersonaDoc }) {
-  const Icon = persona.icon;
-  const accent = persona.accent;
-
-  return (
-    <a
-      href={`#${persona.id}`}
-      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      style={{ "--accent": `var(--${accent})` } as React.CSSProperties}
-    >
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-1 opacity-70"
-        style={{
-          background: `linear-gradient(90deg, var(--${accent}), transparent)`,
-        }}
-      />
-
-      <header className="mb-3 flex items-center gap-3">
-        <div
-          className="grid size-10 shrink-0 place-items-center rounded-xl text-white shadow-md"
-          style={{
-            background: `linear-gradient(135deg, var(--${accent}), color-mix(in oklab, var(--${accent}) 60%, black))`,
-          }}
-        >
-          <Icon className="size-5" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: `var(--${accent})` }}
-          >
-            {persona.tagline}
-          </p>
-          <h3 className="text-base font-bold tracking-tight text-foreground">
-            {persona.name}
-          </h3>
-        </div>
-      </header>
-
-      <p className="flex-1 text-xs leading-relaxed text-muted-foreground">
-        {persona.canDo[0]}
-        {persona.canDo.length > 1 && "…"}
-      </p>
-
-      <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-foreground/70 transition-transform group-hover:translate-x-0.5">
-        Voir le détail
-        <ChevronRight className="size-3.5" aria-hidden />
-      </span>
-    </a>
-  );
-}
+const AUDIENCE_BADGE_CLASS: Record<Audience, string> = {
+  Tous: "bg-chart-1/15 text-chart-1",
+  Compte: "bg-chart-2/15 text-chart-2",
+  Communauté: "bg-chart-3/15 text-chart-3",
+  Auteur: "bg-chart-4/15 text-chart-4",
+  Admin: "bg-chart-5/15 text-chart-5",
+};
 
 /* ------------------------------------------------------------------ */
-/*  Section détaillée par persona                                      */
+/*  Carte tutoriel                                                     */
 /* ------------------------------------------------------------------ */
 
-function PersonaSection({ persona }: { readonly persona: PersonaDoc }) {
-  const Icon = persona.icon;
-  const accent = persona.accent;
-
-  return (
-    <section
-      id={persona.id}
-      aria-labelledby={`persona-${persona.id}`}
-      className="scroll-mt-24"
-    >
-      <div
-        className="relative overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
-        style={{ "--accent": `var(--${accent})` } as React.CSSProperties}
-      >
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-1"
-          style={{
-            background: `linear-gradient(90deg, var(--${accent}), transparent)`,
-          }}
-        />
-
-        {/* Header */}
-        <header className="flex flex-col gap-3 border-b border-border/60 p-6 sm:flex-row sm:items-center">
-          <div
-            className="grid size-12 shrink-0 place-items-center rounded-xl text-white shadow-md"
-            style={{
-              background: `linear-gradient(135deg, var(--${accent}), color-mix(in oklab, var(--${accent}) 60%, black))`,
-            }}
-          >
-            <Icon className="size-6" aria-hidden />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p
-              className="text-[11px] font-semibold uppercase tracking-wider"
-              style={{ color: `var(--${accent})` }}
-            >
-              {persona.tagline}
-            </p>
-            <h2
-              id={`persona-${persona.id}`}
-              className="text-xl font-bold tracking-tight text-foreground"
-            >
-              {persona.name}
-            </h2>
-          </div>
-        </header>
-
-        <div className="space-y-6 p-6">
-          {/* Peut / ne peut pas */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-chart-4/30 bg-chart-4/5 p-4">
-              <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-chart-4">
-                <CheckCircle2 className="size-3.5" aria-hidden />
-                Ce que je peux faire
-              </h3>
-              <ul className="space-y-1.5 text-sm text-foreground/80">
-                {persona.canDo.map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span aria-hidden className="mt-1 shrink-0 text-chart-4">
-                      ✓
-                    </span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="rounded-xl border border-chart-5/30 bg-chart-5/5 p-4">
-              <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-chart-5">
-                <Lock className="size-3.5" aria-hidden />
-                Ce que je ne peux pas faire
-              </h3>
-              <ul className="space-y-1.5 text-sm text-foreground/80">
-                {persona.cannotDo.map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span aria-hidden className="mt-1 shrink-0 text-chart-5">
-                      ✗
-                    </span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Routes */}
-          <div>
-            <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <BookOpen className="size-3.5" aria-hidden />
-              Routes concernées
-            </h3>
-            <ul className="space-y-1.5">
-              {persona.routes.map((route) => (
-                <li
-                  key={route.path}
-                  className="flex flex-wrap items-baseline gap-2 text-sm"
-                >
-                  <code
-                    className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground/90"
-                    style={{
-                      background: `color-mix(in oklab, var(--${accent}) 12%, transparent)`,
-                      color: `var(--${accent})`,
-                    }}
-                  >
-                    {route.path}
-                  </code>
-                  <span className="text-xs text-muted-foreground">
-                    {route.label}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Carte de concept                                                   */
-/* ------------------------------------------------------------------ */
-
-function ConceptCard({ concept }: { readonly concept: ConceptDoc }) {
-  const Icon = concept.icon;
-  const accent = concept.accent;
+function TutorialCard({ tutorial }: { readonly tutorial: Tutorial }) {
+  const Icon = tutorial.icon;
+  const accent = tutorial.accent;
 
   return (
     <article
-      className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-sm"
+      className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-sm transition-shadow duration-300 hover:shadow-lg"
       style={{ "--accent": `var(--${accent})` } as React.CSSProperties}
     >
       <div
@@ -610,6 +762,7 @@ function ConceptCard({ concept }: { readonly concept: ConceptDoc }) {
         }}
       />
 
+      {/* En-tête : numéro + titre + badge */}
       <header className="mb-3 flex items-start gap-3">
         <div
           className="grid size-10 shrink-0 place-items-center rounded-xl text-white shadow-md"
@@ -617,28 +770,236 @@ function ConceptCard({ concept }: { readonly concept: ConceptDoc }) {
             background: `linear-gradient(135deg, var(--${accent}), color-mix(in oklab, var(--${accent}) 60%, black))`,
           }}
         >
-          <Icon className="size-5" aria-hidden />
+          <span className="text-sm font-bold tabular-nums">
+            {String(tutorial.num).padStart(2, "0")}
+          </span>
         </div>
-        <h3 className="min-w-0 flex-1 text-base font-bold tracking-tight text-foreground">
-          {concept.title}
-        </h3>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-bold tracking-tight text-foreground">
+              {tutorial.title}
+            </h3>
+            <span
+              className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${AUDIENCE_BADGE_CLASS[tutorial.audience]}`}
+            >
+              {tutorial.audience}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            {tutorial.summary}
+          </p>
+        </div>
+        <Icon
+          className="mt-1 size-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
       </header>
 
-      <p className="mb-3 text-sm font-medium text-foreground/80">
-        {concept.summary}
-      </p>
-
-      <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
-        {concept.details.map((detail) => (
-          <li key={detail} className="flex gap-2">
-            <span aria-hidden className="mt-0.5 shrink-0">
-              •
+      {/* Étapes */}
+      <ol className="mt-1 space-y-2">
+        {tutorial.steps.map((step, index) => (
+          <li key={step.text} className="flex gap-2.5 text-sm">
+            <span
+              aria-hidden
+              className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white"
+              style={{
+                background: `linear-gradient(135deg, var(--${accent}), color-mix(in oklab, var(--${accent}) 60%, black))`,
+              }}
+            >
+              {index + 1}
             </span>
-            <span>{detail}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-foreground/90">{step.text}</p>
+              {step.hint && (
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  {step.hint}
+                </p>
+              )}
+            </div>
           </li>
         ))}
-      </ul>
+      </ol>
+
+      {/* Astuce */}
+      {tutorial.tip && (
+        <div className="mt-3 flex gap-2 rounded-lg border border-chart-4/30 bg-chart-4/5 p-2.5 text-xs">
+          <Lightbulb
+            className="mt-0.5 size-3.5 shrink-0 text-chart-4"
+            aria-hidden
+          />
+          <p className="leading-relaxed text-foreground/80">
+            <span className="font-semibold text-chart-4">Astuce.</span>{" "}
+            {tutorial.tip}
+          </p>
+        </div>
+      )}
+
+      {/* Warning */}
+      {tutorial.warning && (
+        <div className="mt-2 flex gap-2 rounded-lg border border-chart-3/40 bg-chart-3/5 p-2.5 text-xs">
+          <TriangleAlert
+            className="mt-0.5 size-3.5 shrink-0 text-chart-3"
+            aria-hidden
+          />
+          <p className="leading-relaxed text-foreground/80">
+            <span className="font-semibold text-chart-3">Attention.</span>{" "}
+            {tutorial.warning}
+          </p>
+        </div>
+      )}
+
+      {/* CTA */}
+      {tutorial.link && (
+        <Link
+          href={tutorial.link.href}
+          className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold transition-transform hover:translate-x-0.5"
+          style={{ color: `var(--${accent})` }}
+        >
+          Faire maintenant
+          <ArrowRight className="size-4" aria-hidden />
+        </Link>
+      )}
     </article>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Section Stockage & persistance (dev)                               */
+/* ------------------------------------------------------------------ */
+
+function StorageSection() {
+  return (
+    <section
+      id="dev"
+      aria-labelledby="dev-title"
+      className="scroll-mt-24 space-y-4"
+    >
+      <header className="flex items-start gap-3">
+        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-chart-2 to-chart-3 text-white shadow-md">
+          <Code2 className="size-5" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-chart-2">
+            Pour les développeurs
+          </p>
+          <h2
+            id="dev-title"
+            className="text-xl font-bold tracking-tight text-foreground"
+          >
+            Stockage &amp; persistance
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Comment un article passe du formulaire au fichier{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+              data/blog.json
+            </code>
+            .
+          </p>
+        </div>
+      </header>
+
+      {/* Pipeline */}
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
+        <h3 className="mb-3 flex items-center gap-2 text-base font-bold tracking-tight text-foreground">
+          <Database className="size-4 text-chart-2" aria-hidden />
+          Pipeline en 6 étapes
+        </h3>
+        <ol className="space-y-2">
+          {STORAGE_PIPELINE.map((step, index) => (
+            <li key={step} className="flex gap-2.5 text-sm">
+              <span
+                aria-hidden
+                className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-gradient-to-br from-chart-2 to-chart-3 text-[10px] font-bold text-white"
+              >
+                {index + 1}
+              </span>
+              <p className="leading-relaxed text-foreground/90">{step}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {/* Deux brouillons */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-chart-4/30 bg-chart-4/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-chart-4">
+            <Database className="size-3.5" aria-hidden />
+            Brouillon serveur (status: draft)
+          </h3>
+          <ul className="space-y-1.5 text-sm text-foreground/80">
+            <li className="flex gap-2">
+              <span aria-hidden className="shrink-0 text-chart-4">•</span>
+              <span>
+                Persisté dans{" "}
+                <code className="rounded bg-background/60 px-1 py-0.5 font-mono text-xs">
+                  data/blog.json
+                </code>
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span aria-hidden className="shrink-0 text-chart-4">•</span>
+              <span>C&apos;est un article réel, invisible des listings publics.</span>
+            </li>
+            <li className="flex gap-2">
+              <span aria-hidden className="shrink-0 text-chart-4">•</span>
+              <span>Visible par l&apos;auteur et les admins via ?preview=1.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className="rounded-2xl border border-chart-2/30 bg-chart-2/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-chart-2">
+            <Lock className="size-3.5" aria-hidden />
+            Brouillon client (sessionStorage)
+          </h3>
+          <ul className="space-y-1.5 text-sm text-foreground/80">
+            <li className="flex gap-2">
+              <span aria-hidden className="shrink-0 text-chart-2">•</span>
+              <span>
+                Clé{" "}
+                <code className="rounded bg-background/60 px-1 py-0.5 font-mono text-xs">
+                  genesis:blog:article-draft
+                </code>
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span aria-hidden className="shrink-0 text-chart-2">•</span>
+              <span>Sauvegardé auto (500 ms), TTL 24 h.</span>
+            </li>
+            <li className="flex gap-2">
+              <span aria-hidden className="shrink-0 text-chart-2">•</span>
+              <span>Jamais envoyé au serveur tant que le formulaire n&apos;est pas soumis.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Garanties */}
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
+        <h3 className="mb-3 flex items-center gap-2 text-base font-bold tracking-tight text-foreground">
+          <ShieldCheck className="size-4 text-chart-3" aria-hidden />
+          Garanties de <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">data/blog.json</code>
+        </h3>
+        <ul className="space-y-2">
+          {STORAGE_GUARANTEES.map((guarantee) => (
+            <li key={guarantee} className="flex gap-2 text-sm text-foreground/80">
+              <CheckCircle2
+                className="mt-0.5 size-4 shrink-0 text-chart-4"
+                aria-hidden
+              />
+              <span>{guarantee}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
+          Le seul fichier autorisé à toucher le disque est{" "}
+          <code className="rounded bg-background/60 px-1 py-0.5 font-mono">
+            @/app/blog/lib/storage.ts
+          </code>
+          . Importable uniquement côté serveur (<code className="rounded bg-background/60 px-1 py-0.5 font-mono">&quot;server-only&quot;</code>).
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -655,96 +1016,140 @@ export default function BlogHelpPage() {
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-chart-3/20 blur-3xl"
         />
-
         <div className="relative">
           <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
             <BookOpen className="size-3.5 text-chart-2" aria-hidden />
             Mode d&apos;emploi · Blog
           </span>
-
           <h1 className="mt-4 bg-gradient-to-r from-chart-1 via-chart-2 to-chart-5 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
-            Le blog en 5 minutes
+            26 tutoriels pas-à-pas
           </h1>
-
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Articles éditoriaux, taxonomie à 3 niveaux + tags, commentaires
-            imbriqués, likes, favoris, groupes de discussion, notifications.
-            Ce guide décrit ce que vous pouvez faire selon votre rôle, les
-            concepts clés et les limites assumées du MVP.
+            Chaque action courante du blog, expliquée en étapes concrètes
+            et cliquables. Trouvez votre tutoriel par audience ci-dessous.
+            Une section finale documente le stockage pour les développeurs.
           </p>
         </div>
       </header>
 
-      {/* Sommaire : qui êtes-vous ? */}
-      <section aria-labelledby="qui-etes-vous">
-        <h2
-          id="qui-etes-vous"
-          className="mb-4 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground"
+      {/* Sommaire — 5 audiences + dev */}
+      <nav
+        aria-label="Sommaire"
+        className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
+      >
+        {AUDIENCES.map((config) => {
+          const Icon = config.icon;
+          const count = TUTORIALS.filter(
+            (tutorial) => tutorial.audience === config.id,
+          ).length;
+          return (
+            <a
+              key={config.id}
+              href={`#audience-${config.id}`}
+              className="group flex items-center gap-2 rounded-xl border border-border/60 bg-card p-3 transition-colors hover:bg-muted/40"
+            >
+              <span
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-white shadow-sm"
+                style={{
+                  background: `linear-gradient(135deg, var(--${config.accent}), color-mix(in oklab, var(--${config.accent}) 60%, black))`,
+                }}
+              >
+                <Icon className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {config.label}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {count} tuto{count > 1 ? "s" : ""}
+                </p>
+              </div>
+            </a>
+          );
+        })}
+        <a
+          href="#dev"
+          className="group flex items-center gap-2 rounded-xl border border-border/60 bg-card p-3 transition-colors hover:bg-muted/40"
         >
-          <Sparkles className="size-5 text-chart-1" aria-hidden />
-          Qui êtes-vous ?
-        </h2>
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-chart-2 to-chart-3 text-white shadow-sm">
+            <Code2 className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">
+              Développeurs
+            </p>
+            <p className="text-[11px] text-muted-foreground">Stockage</p>
+          </div>
+        </a>
+      </nav>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {PERSONAS.map((persona) => (
-            <PersonaCard key={persona.id} persona={persona} />
-          ))}
-        </div>
-      </section>
+      {/* Sections par audience */}
+      {AUDIENCES.map((config) => {
+        const tutorials = TUTORIALS.filter(
+          (tutorial) => tutorial.audience === config.id,
+        );
+        if (tutorials.length === 0) return null;
 
-      {/* Détail par persona */}
-      {PERSONAS.map((persona) => (
-        <PersonaSection key={persona.id} persona={persona} />
-      ))}
+        const Icon = config.icon;
 
-      {/* Concepts clés */}
-      <section aria-labelledby="concepts-cles">
-        <h2
-          id="concepts-cles"
-          className="mb-4 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground"
-        >
-          <Lightbulb className="size-5 text-chart-3" aria-hidden />
-          Concepts clés
-        </h2>
+        return (
+          <section
+            key={config.id}
+            id={`audience-${config.id}`}
+            aria-labelledby={`audience-${config.id}-title`}
+            className="scroll-mt-24 space-y-4"
+          >
+            <header className="flex items-start gap-3">
+              <div
+                className="grid size-11 shrink-0 place-items-center rounded-xl text-white shadow-md"
+                style={{
+                  background: `linear-gradient(135deg, var(--${config.accent}), color-mix(in oklab, var(--${config.accent}) 60%, black))`,
+                }}
+              >
+                <Icon className="size-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p
+                  className="text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ color: `var(--${config.accent})` }}
+                >
+                  {tutorials.length} tutoriel{tutorials.length > 1 ? "s" : ""}
+                </p>
+                <h2
+                  id={`audience-${config.id}-title`}
+                  className="text-xl font-bold tracking-tight text-foreground"
+                >
+                  {config.label}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {config.description}
+                </p>
+              </div>
+            </header>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {CONCEPTS.map((concept) => (
-            <ConceptCard key={concept.id} concept={concept} />
-          ))}
-        </div>
-      </section>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {tutorials.map((tutorial) => (
+                <TutorialCard key={tutorial.id} tutorial={tutorial} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
 
-      {/* Limites du MVP */}
-      <section className="rounded-2xl border border-chart-3/40 bg-chart-3/5 p-6">
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
-          <TriangleAlert className="size-5 text-chart-3" aria-hidden />
-          Limites assumées du MVP
-        </h2>
+      {/* Section développeur */}
+      <StorageSection />
 
-        <ul className="space-y-2 text-sm text-foreground/80">
-          {LIMITS.map((limit) => (
-            <li key={limit} className="flex gap-2">
-              <Info className="mt-0.5 size-4 shrink-0 text-chart-3" aria-hidden />
-              <span>{limit}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Pour les développeurs */}
+      {/* Pied — liens utiles */}
       <section className="rounded-2xl border border-border/60 bg-card p-6">
-        <h2 className="mb-2 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
-          <Tag className="size-5 text-chart-2" aria-hidden />
-          Pour les développeurs
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
+          <Bell className="size-5 text-chart-1" aria-hidden />
+          Et après ?
         </h2>
-
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Si vous cherchez le plan de développement du module Blog (epics,
-          sprints, fichiers à créer) ou le mode d&apos;emploi des outils de
-          développement Genesis (SelectFiles, CreateFiles, CopyToIA), ces
-          contenus sont documentés ailleurs.
+          Une question qui n&apos;est pas couverte ? Les outils Genesis
+          (SelectFiles, CreateFiles, CopyToIA) ont leur propre guide.
+          La recherche du blog accepte des filtres avancés via l&apos;URL.
         </p>
-
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
             href="/genesis/help"
@@ -758,6 +1163,13 @@ export default function BlogHelpPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
           >
             Retour au blog
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+          <Link
+            href="/blog/search"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            Recherche avancée
             <ArrowRight className="size-4" aria-hidden />
           </Link>
         </div>

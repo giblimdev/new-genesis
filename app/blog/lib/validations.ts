@@ -5,29 +5,25 @@ projectId:       new-genesis
 type:            config
 generic:         true
 
-role:            Schéma Zod canonique du document Blog (schemaVersion === 2).
+role:            Schéma Zod canonique du document Blog (schemaVersion === 3).
                  Source unique de vérité : tous les types TS du module sont
                  dérivés par z.infer dans @/app/blog/lib/types.ts. Valide
-                 strictement (mode .strict()) l'intégralité de
-                 data/blog.json : meta, taxonomy (thèmes/catégories/sous-
-                 catégories imbriqués + tags à plat), articles (avec
-                 content[] en blocs hiérarchiques), groups (avec members[]
-                 et discussions[].posts[]), userContent (map userId →
-                 notifications + favoris) et auditLog. Le superRefine
-                 vérifie, pour chaque arbre (content[], comments[] et
-                 posts[]), l'unicité des ids, la résolvabilité des
-                 parentId (racine = article.id ou discussion.id), l'absence
-                 de cycle, la profondeur maximale (6 pour content, 5 pour
-                 comments et posts) et l'unicité de order parmi les frères.
-                 Exporte aussi les schémas d'input par entité (article,
-                 commentaire, discussion, post, groupe, notification,
-                 favori) pour les Server Actions.
+                 strictement (mode .strict()) l'intégralité de data/blog.json :
+                 meta, taxonomy, playlists (NOUVEAU), articles (avec content[]
+                 en blocs hiérarchiques), groups, userContent et auditLog.
+                 Le superRefine vérifie, pour chaque arbre (content[],
+                 comments[] et posts[]), l'unicité des ids, la résolvabilité
+                 des parentId, l'absence de cycle, la profondeur max et
+                 l'unicité de order parmi les frères. Il vérifie AUSSI (NOUVEAU)
+                 que les playlists sont cohérentes : ids uniques, articleIds
+                 résolvables, et qu'un article n'appartient qu'à UNE playlist.
+                 Exporte aussi les schémas d'input par entité pour les
+                 Server Actions.
 
 flow:            Module TypeScript pur → export de tous les schémas Zod.
                  Aucun état, aucun effet. blogDocumentSchema.superRefine
-                 utilise la fonction interne validateTreeStructure pour
-                 chaque article.content[], article.comments[] et
-                 group.discussions[].posts[].
+                 utilise validateTreeStructure pour content/comments/posts,
+                 puis une vérification dédiée pour playlists.
 
 ecosystem:       BlogCore = [
                    "@/app/blog/lib/admin.ts",
@@ -44,7 +40,9 @@ ecosystem:       BlogCore = [
 relatedFiles:    ["@/app/blog/lib/types.ts",
                   "@/app/blog/lib/storage.ts",
                   "@/app/blog/lib/tree.ts"]
+
 imports:         ["zod"]
+
 exports:         ["BLOG_SCHEMA_VERSION", "isoDate",
                   "sectionBlockSchema", "paragraphBlockSchema",
                   "imageBlockSchema", "videoBlockSchema",
@@ -55,6 +53,8 @@ exports:         ["BLOG_SCHEMA_VERSION", "isoDate",
                   "groupMemberSchema", "groupSchema",
                   "subCategorySchema", "categorySchema", "themeSchema",
                   "tagSchema", "taxonomySchema",
+                  "playlistVisibilityEnum", "PlaylistVisibility",
+                  "playlistSchema", "playlistInputSchema", "PlaylistInput",
                   "notificationSchema", "favoriteFolderSchema",
                   "userContentSchema", "userContentMapSchema",
                   "auditEntrySchema", "blogMetaSchema",
@@ -65,29 +65,32 @@ exports:         ["BLOG_SCHEMA_VERSION", "isoDate",
                   "groupInputSchema", "notificationInputSchema",
                   "favoriteFolderInputSchema",
                   "ArticleStatus", "Visibility"]
+
 useBy:           ["@/app/blog/lib/types.ts",
                   "@/app/blog/lib/storage.ts",
                   "@/app/blog/lib/tree.ts",
                   "@/app/blog/lib/services/article.ts",
                   "@/app/blog/lib/services/comment.ts",
-                  "@/app/blog/lib/services/discussion.ts",
                   "@/app/blog/lib/services/favorite.ts",
                   "@/app/blog/lib/services/group.ts",
                   "@/app/blog/lib/services/like.ts",
                   "@/app/blog/lib/services/notification.ts",
+                  "@/app/blog/lib/services/playlist.ts",
                   "@/app/blog/lib/services/search.ts",
                   "@/app/blog/lib/services/taxonomy.ts",
                   "@/app/blog/lib/actions/article.ts",
                   "@/app/blog/lib/actions/comment.ts",
-                  "@/app/blog/lib/actions/discussion.ts",
                   "@/app/blog/lib/actions/favorite.ts",
                   "@/app/blog/lib/actions/group.ts",
                   "@/app/blog/lib/actions/like.ts",
                   "@/app/blog/lib/actions/notification.ts",
+                  "@/app/blog/lib/actions/playlist.ts",
                   "@/app/blog/lib/actions/taxonomy.ts"]
 
-userStories:     ["us1100010", "us1100011"]
-status:          done
+userStories:     ["us1100010", "us1100011",
+                  "*en tant qu'auteur je veux regrouper mes articles en playlists"]
+
+status:          wip
 pathChecked:     ✔true
 metaDataChecked: ✔true
 scriptChecked:   ✔true
@@ -99,7 +102,7 @@ import { z } from "zod";
 /*  Constantes                                                        */
 /* ------------------------------------------------------------------ */
 
-export const BLOG_SCHEMA_VERSION = 2 as const;
+export const BLOG_SCHEMA_VERSION = 3 as const;
 
 /** Date ISO 8601 stricte (avec timezone). */
 export const isoDate = z.string().datetime({ offset: true });
@@ -113,6 +116,13 @@ export type ArticleStatus = z.infer<typeof articleStatusEnum>;
 
 export const visibilityEnum = z.enum(["public", "private", "unlisted"]);
 export type Visibility = z.infer<typeof visibilityEnum>;
+
+export const playlistVisibilityEnum = z.enum([
+  "public",
+  "unlisted",
+  "private",
+]);
+export type PlaylistVisibility = z.infer<typeof playlistVisibilityEnum>;
 
 /* ------------------------------------------------------------------ */
 /*  Bloc de contenu — base                                             */
@@ -328,6 +338,36 @@ export const taxonomySchema = z
   .strict();
 
 /* ------------------------------------------------------------------ */
+/*  Playlist — collection éditoriale ordonnée                         */
+/* ------------------------------------------------------------------ */
+
+export const playlistSchema = z
+  .object({
+    id: z.string().min(1),
+    slug: z.string().min(1).max(100),
+    name: z.string().trim().min(1).max(100),
+    description: z.string().max(500).optional(),
+    coverImage: z.string().min(1).optional(),
+    articleIds: z.array(z.string().min(1)),
+    visibility: playlistVisibilityEnum,
+    order: z.number().int().min(0),
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  })
+  .strict();
+
+export const playlistInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    description: z.string().trim().max(500).optional(),
+    coverImage: z.string().min(1).optional(),
+    visibility: playlistVisibilityEnum,
+  })
+  .strict();
+
+export type PlaylistInput = z.infer<typeof playlistInputSchema>;
+
+/* ------------------------------------------------------------------ */
 /*  Groupes, membres, discussions, posts                              */
 /* ------------------------------------------------------------------ */
 
@@ -469,7 +509,10 @@ function validateTreeStructure(
   pathPrefix: (string | number)[],
 ): void {
   /* 1. Unicité des ids */
-  const byId = new Map<string, { id: string; parentId: string; order: number }>();
+  const byId = new Map<
+    string,
+    { id: string; parentId: string; order: number }
+  >();
   for (const b of blocks) {
     if (byId.has(b.id)) {
       ctx.addIssue({
@@ -543,6 +586,7 @@ export const blogDocumentSchema = z
   .object({
     meta: blogMetaSchema,
     taxonomy: taxonomySchema,
+    playlists: z.array(playlistSchema),
     articles: z.array(articleSchema),
     groups: z.array(groupSchema),
     userContent: userContentMapSchema,
@@ -550,6 +594,7 @@ export const blogDocumentSchema = z
   })
   .strict()
   .superRefine((doc, ctx) => {
+    /* 1. Arbres content[] et comments[] de chaque article */
     doc.articles.forEach((article, i) => {
       validateTreeStructure(
         article.content,
@@ -566,6 +611,8 @@ export const blogDocumentSchema = z
         ["articles", i, "comments"],
       );
     });
+
+    /* 2. Arbres posts[] de chaque discussion */
     doc.groups.forEach((group, gi) => {
       group.discussions.forEach((disc, di) => {
         validateTreeStructure(
@@ -575,6 +622,41 @@ export const blogDocumentSchema = z
           ctx,
           ["groups", gi, "discussions", di, "posts"],
         );
+      });
+    });
+
+    /* 3. Cohérence playlists ↔ articles */
+    const playlistIds = new Set<string>();
+    const articleToPlaylist = new Map<string, string>();
+    const knownArticleIds = new Set(doc.articles.map((a) => a.id));
+
+    doc.playlists.forEach((playlist, pi) => {
+      if (playlistIds.has(playlist.id)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Playlist id dupliqué : "${playlist.id}"`,
+          path: ["playlists", pi],
+        });
+      }
+      playlistIds.add(playlist.id);
+
+      playlist.articleIds.forEach((articleId, ai) => {
+        if (!knownArticleIds.has(articleId)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `articleId orphelin "${articleId}" dans playlist "${playlist.id}"`,
+            path: ["playlists", pi, "articleIds", ai],
+          });
+        }
+        if (articleToPlaylist.has(articleId)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Article "${articleId}" présent dans plusieurs playlists ("${articleToPlaylist.get(articleId)}" et "${playlist.id}")`,
+            path: ["playlists", pi, "articleIds", ai],
+          });
+        } else {
+          articleToPlaylist.set(articleId, playlist.id);
+        }
       });
     });
   });

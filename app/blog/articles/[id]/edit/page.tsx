@@ -1,42 +1,35 @@
 /*
 path :           app/blog/articles/[id]/edit/page.tsx
-tag :            ["blog", "page", "admin", "article", "edit", "protected"]
+tag :            ["blog", "page", "admin", "article", "edit", "protected", "playlist"]
 projectId:       new-genesis
-type :           page
+type:            page
 generic:         false
 
-role:            Page d'édition d'article. Sync page + Suspense ;
-                 toute la logique runtime (await params, require
-                 session, chargement article + taxonomie + manifeste
+role:            Page d'édition d'article. Sync page + Suspense ; toute
+                 la logique runtime (await params, require session,
+                 chargement article + taxonomie + playlists + manifeste
                  médias) est isolée dans un composant async. Rend
-                 ArticleForm (mode="edit", initial=article).
-                 L'autorisation est vérifiée côté serveur : l'auteur
-                 ou un admin peut éditer ; sinon 404.
+                 ArticleForm (mode="edit", initial=article,
+                 currentPlaylistId=id de la playlist qui contient l'article,
+                 ou null). L'autorisation est vérifiée côté serveur :
+                 l'auteur ou un admin peut éditer ; sinon 404.
 
 flow:            BlogAdminEditArticlePage (sync) → Suspense →
                  EditArticleSection (async) → await params →
                  getArticleById → si absent 404 → getBlogSession →
                  si null 404 → (isAuthor || isAdmin) sinon 404 →
-                 Promise.all([listThemes(), listTags()]) +
-                 getMediaManifest() → <ArticleForm mode="edit" ... />.
+                 Promise.all([listThemes, listTags, listPlaylists,
+                 getPlaylistForArticle(id)]) + getMediaManifest →
+                 <ArticleForm mode="edit" ... currentPlaylistId />
 
-ecosystem:       BlogAdmin = [
-                   "@/app/blog/articles/[id]/edit/page.tsx",
-                   "@/app/blog/articles/new/page.tsx",
-                   "@/app/blog/articles/page.tsx",
-                   "@/app/blog/articles/ArticleRow.tsx",
-                   "@/app/blog/setup/page.tsx",
-                   "@/app/blog/taxonomy/page.tsx",
-                   "@/app/blog/components/ArticleForm.tsx",
-                   "@/app/blog/components/CoverImagePicker.tsx",
-                   "@/app/blog/components/QuickCreateCategoryDialog.tsx",
-                   "@/app/blog/components/QuickCreateTagDialog.tsx",
-                   "@/app/blog/components/articleDraft.ts",
+ecosystem:       Blog = [
+                   ... (voir tableau de référence)
                  ]
 
 relatedFiles:    ["@/app/blog/components/ArticleForm.tsx",
                   "@/app/blog/lib/services/article.ts",
                   "@/app/blog/lib/services/taxonomy.ts",
+                  "@/app/blog/lib/services/playlist.ts",
                   "@/app/blog/lib/media.ts",
                   "@/app/blog/lib/session.ts",
                   "@/app/blog/lib/admin.ts"]
@@ -44,6 +37,7 @@ relatedFiles:    ["@/app/blog/components/ArticleForm.tsx",
 imports:         ["react", "next/navigation",
                   "@/app/blog/lib/services/article",
                   "@/app/blog/lib/services/taxonomy",
+                  "@/app/blog/lib/services/playlist",
                   "@/app/blog/lib/media",
                   "@/app/blog/lib/session",
                   "@/app/blog/lib/admin",
@@ -54,8 +48,10 @@ exports:         ["default BlogAdminEditArticlePage"]
 
 useBy:           []
 
-userStories:     ["us1100005"]
-status:          done
+userStories:     ["us1100005",
+                  "*en tant qu'auteur je veux rattacher mon article à une playlist"]
+
+status:          wip
 pathChecked:     ✔true
 metaDataChecked: ✔true
 scriptChecked:   ✔true
@@ -66,6 +62,10 @@ import { notFound } from "next/navigation";
 
 import { getArticleById } from "@/app/blog/lib/services/article";
 import { listTags, listThemes } from "@/app/blog/lib/services/taxonomy";
+import {
+  getPlaylistForArticle,
+  listPlaylists,
+} from "@/app/blog/lib/services/playlist";
 import { getMediaManifest } from "@/app/blog/lib/media";
 import { getBlogSession } from "@/app/blog/lib/session";
 import { isAdmin } from "@/app/blog/lib/admin";
@@ -103,11 +103,9 @@ async function EditArticleSection({
 }) {
   const { id } = await params;
 
-  /* 1. Article */
   const article = await getArticleById(id);
   if (!article) notFound();
 
-  /* 2. Session (obligatoire) + autorisation serveur */
   const session = await getBlogSession();
   if (!session?.user) notFound();
 
@@ -115,8 +113,12 @@ async function EditArticleSection({
   const isAuthor = article.authorId === session.user.id;
   if (!isAuthor && !admin) notFound();
 
-  /* 3. Taxonomie + manifeste médias à jour */
-  const [themes, tags] = await Promise.all([listThemes(), listTags()]);
+  const [themes, tags, playlists, currentPlaylist] = await Promise.all([
+    listThemes(),
+    listTags(),
+    listPlaylists(),
+    getPlaylistForArticle(id),
+  ]);
   const mediaManifest = getMediaManifest();
 
   return (
@@ -125,6 +127,8 @@ async function EditArticleSection({
       initial={article}
       themes={themes}
       tags={tags}
+      playlists={playlists}
+      currentPlaylistId={currentPlaylist?.id ?? null}
       mediaManifest={mediaManifest}
     />
   );

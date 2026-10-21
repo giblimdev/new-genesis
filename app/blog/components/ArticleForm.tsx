@@ -1,61 +1,33 @@
 /*
 path :           app/blog/components/ArticleForm.tsx
-tag :            ["blog", "component", "admin", "article", "form", "editor"]
+tag :            ["blog", "component", "admin", "article", "form", "editor", "playlist"]
 projectId:       new-genesis
-type :           component
+type:            component
 generic:         false
 
 role:            Formulaire complet d'article (métadonnées, taxonomie
-                 3 niveaux, tags, publication, contenu via BlockEditor).
-                 Mode create → createArticleAction ; mode edit →
-                 updateArticleAction. Brouillon persisté en
-                 sessionStorage. Couverture uploadée immédiatement
-                 via CoverImagePicker, rollback sur « Annuler ».
+                 3 niveaux, tags, playlist optionnelle, publication,
+                 contenu via BlockEditor). Mode create → createArticleAction ;
+                 mode edit → updateArticleAction. Après création/mise à
+                 jour, appelle assignArticleToPlaylistAction(articleId,
+                 playlistId | null) pour rattacher/détacher l'article à
+                 une playlist (0 ou 1, contrainte respectée). Brouillon
+                 persisté en sessionStorage (playlistId inclus). Couverture
+                 uploadée immédiatement via CoverImagePicker, rollback
+                 sur « Annuler ».
 
-flow:            useState(champs) + loadDraft(mode, id) →
-                 useEffect de sauvegarde débounce 500 ms →
-                 submit → FormData → createArticleAction /
-                 updateArticleAction → succès : clearDraft + push.
+flow:            useState(champs) + loadDraft(mode, id) → useEffect de
+                 sauvegarde débounce 500 ms → submit → FormData →
+                 createArticleAction / updateArticleAction → succès :
+                 assignArticleToPlaylistAction(articleId, playlistId) →
+                 clearDraft + push.
 
 ecosystem:       BlogUI = [
-                   "@/app/blog/components/ArticleBody.tsx",
-                   "@/app/blog/components/ArticleCard.tsx",
-                   "@/app/blog/components/ArticleForm.tsx",
-                   "@/app/blog/components/ArticleHeader.tsx",
-                   "@/app/blog/components/CommentForm.tsx",
-                   "@/app/blog/components/CommentTree.tsx",
-                   "@/app/blog/components/ContentBlockRenderer.tsx",
-                   "@/app/blog/components/CoverImagePicker.tsx",
-                   "@/app/blog/components/DiscussionThread.tsx",
-                   "@/app/blog/components/FavoriteButton.tsx",
-                   "@/app/blog/components/GroupCard.tsx",
-                   "@/app/blog/components/LikeButton.tsx",
-                   "@/app/blog/components/NotificationBell.tsx",
-                   "@/app/blog/components/NotificationList.tsx",
-                   "@/app/blog/components/PostTree.tsx",
-                   "@/app/blog/components/QuickCreateCategoryDialog.tsx",
-                   "@/app/blog/components/QuickCreateTagDialog.tsx",
-                   "@/app/blog/components/SearchFilters.tsx",
-                   "@/app/blog/components/TableOfContents.tsx",
-                   "@/app/blog/components/TagForm.tsx",
-                   "@/app/blog/components/TaxonomyForm.tsx",
-                   "@/app/blog/components/TaxonomyNav.tsx",
-                   "@/app/blog/components/articleDraft.ts",
-                   "@/app/blog/components/block-editor/BlockEditor.tsx",
-                   "@/app/blog/components/block-editor/BlockList.tsx",
-                   "@/app/blog/components/block-editor/BlockToolbar.tsx",
-                   "@/app/blog/components/block-editor/BlockTypeMenu.tsx",
-                   "@/app/blog/components/block-editor/forms/AudioBlockForm.tsx",
-                   "@/app/blog/components/block-editor/forms/CodeBlockForm.tsx",
-                   "@/app/blog/components/block-editor/forms/DocumentBlockForm.tsx",
-                   "@/app/blog/components/block-editor/forms/EmbedBlockForm.tsx",
-                   "@/app/blog/components/block-editor/forms/ImageBlockForm.tsx",
-                   "@/app/blog/components/block-editor/forms/ParagraphBlockForm.tsx",
-                   "@/app/blog/components/block-editor/forms/SectionBlockForm.tsx",
-                   "@/app/blog/components/block-editor/forms/VideoBlockForm.tsx",
+                   ... (voir tableau de référence)
                  ]
 
 relatedFiles:    ["@/app/blog/lib/actions/article.ts",
+                  "@/app/blog/lib/actions/playlist.ts",
                   "@/app/blog/lib/uploads/actions.ts",
                   "@/app/blog/lib/types.ts",
                   "@/app/blog/components/block-editor/BlockEditor.tsx",
@@ -66,6 +38,7 @@ relatedFiles:    ["@/app/blog/lib/actions/article.ts",
 
 imports:         ["react", "next/link", "next/navigation", "lucide-react", "sonner",
                   "@/app/blog/lib/actions/article",
+                  "@/app/blog/lib/actions/playlist",
                   "@/app/blog/lib/uploads/actions",
                   "@/app/blog/lib/types",
                   "@/app/blog/components/block-editor/BlockEditor",
@@ -87,7 +60,9 @@ exports:         ["ArticleForm", "ArticleFormProps"]
 useBy:           ["@/app/blog/articles/new/page.tsx",
                   "@/app/blog/articles/[id]/edit/page.tsx"]
 
-userStories:     ["us1100005", "us1100006"]
+userStories:     ["us1100005", "us1100006",
+                  "*en tant qu'auteur je veux rattacher mon article à une playlist"]
+
 status:          wip
 pathChecked:     ✔true
 metaDataChecked: ✔true
@@ -95,7 +70,8 @@ scriptChecked:   ✔true
 */
 
 "use client";
-// "use client" justifié : useState, useEffect, useMemo, useTransition, router.push, toast, Tooltip.
+// "use client" justifié : useState, useEffect, useMemo, useTransition,
+// router.push, toast, Tooltip.
 
 import {
   useEffect,
@@ -122,11 +98,13 @@ import {
   createArticleAction,
   updateArticleAction,
 } from "@/app/blog/lib/actions/article";
+import { assignArticleToPlaylistAction } from "@/app/blog/lib/actions/playlist";
 import { deleteCoverFileAction } from "@/app/blog/lib/uploads/actions";
 import type {
   Article,
   ArticleStatus,
   ContentBlock,
+  Playlist,
   Tag,
   Theme,
   Visibility,
@@ -157,7 +135,7 @@ import {
 } from "@/components/ui/tooltip";
 
 /* ------------------------------------------------------------------ */
-/*  Props                                                              */
+/*  Props                                                             */
 /* ------------------------------------------------------------------ */
 
 export interface ArticleFormProps {
@@ -166,10 +144,12 @@ export interface ArticleFormProps {
   readonly themes: readonly Theme[];
   readonly tags: readonly Tag[];
   readonly mediaManifest: readonly string[];
+  readonly playlists: readonly Playlist[];
+  readonly currentPlaylistId: string | null;
 }
 
 /* ------------------------------------------------------------------ */
-/*  FieldLabelWithHint                                                 */
+/*  FieldLabelWithHint                                                */
 /* ------------------------------------------------------------------ */
 
 interface FieldLabelWithHintProps {
@@ -215,7 +195,7 @@ function FieldLabelWithHint({
 }
 
 /* ------------------------------------------------------------------ */
-/*  SectionHeader                                                      */
+/*  SectionHeader                                                     */
 /* ------------------------------------------------------------------ */
 
 function SectionHeader({
@@ -243,7 +223,7 @@ function SectionHeader({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Composant                                                          */
+/*  Composant                                                         */
 /* ------------------------------------------------------------------ */
 
 export function ArticleForm({
@@ -252,6 +232,8 @@ export function ArticleForm({
   themes,
   tags,
   mediaManifest,
+  playlists,
+  currentPlaylistId,
 }: ArticleFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -283,6 +265,9 @@ export function ArticleForm({
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(
     () =>
       new Set(draft?.data.tagIds ?? initial?.tagIds ?? []),
+  );
+  const [playlistId, setPlaylistId] = useState<string>(
+    currentPlaylistId ?? "",
   );
   const [status, setStatus] = useState<ArticleStatus>(
     (draft?.data.status as ArticleStatus | undefined) ??
@@ -442,6 +427,18 @@ export function ArticleForm({
         return;
       }
 
+      /* Assignation playlist (article ↔ 0 ou 1 playlist) */
+      const targetArticleId = result.data.id;
+      const targetPlaylistId = playlistId === "" ? null : playlistId;
+      const assignment = await assignArticleToPlaylistAction(
+        targetArticleId,
+        targetPlaylistId,
+      );
+      if (!assignment.ok) {
+        toast.error(`Article enregistré, mais : ${assignment.error}`);
+        return;
+      }
+
       clearDraft(mode, articleId);
       toast.success(
         mode === "create" ? "Article créé." : "Article mis à jour.",
@@ -542,7 +539,36 @@ export function ArticleForm({
         </Field>
       </section>
 
-      {/* 2. Taxonomie */}
+      {/* 2. Playlist */}
+      <section className="space-y-4 rounded-2xl border border-border/60 bg-card p-4 sm:p-6">
+        <SectionHeader
+          title="Playlist"
+          description="Regroupez cet article dans une playlist éditoriale (0 ou 1)."
+        />
+        <Field>
+          <FieldLabelWithHint
+            htmlFor="article-playlist"
+            hint="Une playlist est une collection ordonnée d'articles. Un article ne peut appartenir qu'à une seule playlist."
+            required={false}
+          >
+            Playlist
+          </FieldLabelWithHint>
+          <NativeSelect
+            id="article-playlist"
+            value={playlistId}
+            onChange={(event) => setPlaylistId(event.target.value)}
+          >
+            <NativeSelectOption value="">— Aucune —</NativeSelectOption>
+            {playlists.map((p) => (
+              <NativeSelectOption key={p.id} value={p.id}>
+                {p.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+      </section>
+
+      {/* 3. Taxonomie */}
       <section className="space-y-5 rounded-2xl border border-border/60 bg-card p-4 sm:p-6">
         <SectionHeader
           title="Taxonomie"
@@ -716,7 +742,7 @@ export function ArticleForm({
         </Field>
       </section>
 
-      {/* 3. Publication */}
+      {/* 4. Publication */}
       <section className="space-y-5 rounded-2xl border border-border/60 bg-card p-4 sm:p-6">
         <SectionHeader
           title="Publication"
@@ -796,7 +822,7 @@ export function ArticleForm({
         </div>
       </section>
 
-      {/* 4. Contenu */}
+      {/* 5. Contenu */}
       <section className="space-y-4 rounded-2xl border border-border/60 bg-card p-4 sm:p-6">
         <SectionHeader
           title="Contenu"

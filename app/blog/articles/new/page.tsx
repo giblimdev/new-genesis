@@ -1,38 +1,31 @@
 /*
-path :           app/blog/admin/articles/new/page.tsx
-tag :            ["blog", "page", "admin", "article", "new"]
+path :           app/blog/articles/new/page.tsx
+tag :            ["blog", "page", "admin", "article", "new", "playlist"]
 projectId:       new-genesis
-type :           page
+type:            page
 generic:         false
 
-role:            Page de création d'article. Sync page + Suspense ;
-                 charge thèmes + tags + manifeste médias dans un
+role:            Page de création d'article. Sync page + Suspense ; charge
+                 thèmes + tags + playlists + manifeste médias dans un
                  composant async et rend ArticleForm (mode="create").
+                 `currentPlaylistId` est null (aucune assignation initiale).
 
 flow:            NewArticlePage (sync) → Suspense → NewArticleSection
-                 async → listThemes + listTags + getMediaManifest →
-                 <ArticleForm mode="create" ... />.
+                 async → Promise.all([listThemes, listTags, listPlaylists])
+                 + getMediaManifest → <ArticleForm mode="create" ... />
 
-ecosystem:       BlogAdmin = [
-                   "@/app/blog/admin/articles/[id]/edit/page.tsx",
-                   "@/app/blog/admin/articles/new/page.tsx",
-                   "@/app/blog/admin/articles/page.tsx",
-                   "@/app/blog/admin/articles/ArticleRow.tsx",
-                   "@/app/blog/admin/setup/page.tsx",
-                   "@/app/blog/admin/taxonomy/page.tsx",
-                   "@/app/blog/components/ArticleForm.tsx",
-                   "@/app/blog/components/CoverImagePicker.tsx",
-                   "@/app/blog/components/QuickCreateCategoryDialog.tsx",
-                   "@/app/blog/components/QuickCreateTagDialog.tsx",
-                   "@/app/blog/components/articleDraft.ts",
+ecosystem:       Blog = [
+                   ... (voir tableau de référence)
                  ]
 
 relatedFiles:    ["@/app/blog/components/ArticleForm.tsx",
                   "@/app/blog/lib/services/taxonomy.ts",
+                  "@/app/blog/lib/services/playlist.ts",
                   "@/app/blog/lib/media.ts"]
 
 imports:         ["react",
                   "@/app/blog/lib/services/taxonomy",
+                  "@/app/blog/lib/services/playlist",
                   "@/app/blog/lib/media",
                   "@/app/blog/components/ArticleForm",
                   "@/components/ui/skeleton"]
@@ -42,6 +35,7 @@ exports:         ["default BlogAdminNewArticlePage"]
 useBy:           []
 
 userStories:     ["us1100005"]
+
 status:          done
 pathChecked:     ✔true
 metaDataChecked: ✔true
@@ -51,6 +45,7 @@ scriptChecked:   ✔true
 import { Suspense } from "react";
 
 import { listTags, listThemes } from "@/app/blog/lib/services/taxonomy";
+import { listPlaylists } from "@/app/blog/lib/services/playlist";
 import { getMediaManifest } from "@/app/blog/lib/media";
 import { ArticleForm } from "@/app/blog/components/ArticleForm";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -74,13 +69,19 @@ export default function BlogAdminNewArticlePage() {
 }
 
 async function NewArticleSection() {
-  const [themes, tags] = await Promise.all([listThemes(), listTags()]);
+  const [themes, tags, playlists] = await Promise.all([
+    listThemes(),
+    listTags(),
+    listPlaylists(),
+  ]);
   const mediaManifest = getMediaManifest();
   return (
     <ArticleForm
       mode="create"
       themes={themes}
       tags={tags}
+      playlists={playlists}
+      currentPlaylistId={null}
       mediaManifest={mediaManifest}
     />
   );

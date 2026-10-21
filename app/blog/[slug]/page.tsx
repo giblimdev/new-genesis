@@ -1,6 +1,6 @@
 /*
 path :           app/blog/[slug]/page.tsx
-tag :            ["blog", "page", "article", "public", "streaming", "avatar"]
+tag :            ["blog", "page", "article", "public", "streaming", "avatar", "playlist"]
 projectId:       new-genesis
 type :           page
 generic:         false
@@ -16,7 +16,10 @@ role:            Page article publique streamée via Cache Components
                  via resolveAuthorProfiles pour afficher nom + avatar
                  réels dans ArticleHeader et CommentTree — les
                  entités Blog (JSON) ne dupliquent pas les données
-                 Prisma User, on joint à l'affichage.
+                 Prisma User, on joint à l'affichage. Résout AUSSI
+                 la playlist qui contient l'article (0 ou 1) via
+                 getPlaylistForArticle — passée à ArticleHeader qui
+                 affiche un <PlaylistBadge> à côté des tags.
                  ⚠️ `await io()` avant getBlogSession() (NowGenerator
                  Prisma 7 synchrone bloquant).
 
@@ -25,19 +28,16 @@ flow:            Page (sync) → <Suspense fallback=<ArticleSkeleton/>> →
                  await io() → await params → getArticleBySlug(slug) →
                  si null → 404 → si status=draft et pas auteur/admin
                  → 404 → si archived et visibility≠unlisted et pas
-                 auteur/admin → 404 → fetch tagNames + resolveAuthor
+                 auteur/admin → 404 → si visibility=private et pas
+                 auteur/admin → 404 → Promise.all([getPlaylistForArticle
+                 (id), listTags()]) → fetch tagNames + resolveAuthor
                  Profiles([authorId, ...commentAuthorIds]) →
                  éventuellement incrementViewCount → rend
-                 ArticleHeader + ArticleBody + CommentForm (racine)
-                 + CommentTree.
+                 ArticleHeader (avec playlist) + ArticleBody +
+                 CommentForm (racine) + CommentTree.
 
 ecosystem:       Blog = [
                    "@/app/blog/[slug]/page.tsx",
-                   "@/app/blog/admin/articles/[id]/edit/page.tsx",
-                   "@/app/blog/admin/articles/new/page.tsx",
-                   "@/app/blog/admin/articles/page.tsx",
-                   "@/app/blog/admin/setup/page.tsx",
-                   "@/app/blog/admin/taxonomy/page.tsx",
                    "@/app/blog/articles/[id]/edit/page.tsx",
                    "@/app/blog/articles/ArticleRow.tsx",
                    "@/app/blog/articles/new/page.tsx",
@@ -50,8 +50,13 @@ ecosystem:       Blog = [
                    "@/app/blog/help/page.tsx",
                    "@/app/blog/notifications/page.tsx",
                    "@/app/blog/page.tsx",
+                   "@/app/blog/playlist/[slug]/page.tsx",
+                   "@/app/blog/playlists/manage/page.tsx",
+                   "@/app/blog/playlists/page.tsx",
                    "@/app/blog/search/page.tsx",
+                   "@/app/blog/setup/page.tsx",
                    "@/app/blog/tag/[slug]/page.tsx",
+                   "@/app/blog/taxonomy/page.tsx",
                    "@/app/blog/theme/[slug]/[category]/[subCategory]/page.tsx",
                    "@/app/blog/theme/[slug]/[category]/page.tsx",
                    "@/app/blog/theme/[slug]/page.tsx",
@@ -63,6 +68,7 @@ relatedFiles:    ["@/app/blog/lib/services/article.ts",
                   "@/app/blog/lib/services/taxonomy.ts",
                   "@/app/blog/lib/services/favorite.ts",
                   "@/app/blog/lib/services/author.ts",
+                  "@/app/blog/lib/services/playlist.ts",
                   "@/app/blog/lib/admin.ts",
                   "@/app/blog/lib/session.ts",
                   "@/app/blog/components/ArticleHeader.tsx",
@@ -70,11 +76,12 @@ relatedFiles:    ["@/app/blog/lib/services/article.ts",
                   "@/app/blog/components/CommentForm.tsx",
                   "@/app/blog/components/CommentTree.tsx"]
 
-imports:         ["react", "next/navigation", "next/cache",
+imports:         ["react", "next/navigation", "next/cache", "next",
                   "@/app/blog/lib/services/article",
                   "@/app/blog/lib/services/taxonomy",
                   "@/app/blog/lib/services/favorite",
                   "@/app/blog/lib/services/author",
+                  "@/app/blog/lib/services/playlist",
                   "@/app/blog/lib/admin",
                   "@/app/blog/lib/session",
                   "@/app/blog/components/ArticleHeader",
@@ -88,7 +95,8 @@ exports:         ["default BlogArticlePage", "generateMetadata"]
 useBy:           []
 
 userStories:     ["us4100003",
-                  "*en tant qu'utilisateur je veux voir le nom de l'auteur de l'article"]
+                  "*en tant qu'utilisateur je veux voir le nom de l'auteur de l'article",
+                  "*en tant que lecteur je veux voir à quelle playlist appartient un article"]
 
 status:          wip
 pathChecked:     ✔true
@@ -108,6 +116,7 @@ import {
 import { listTags } from "@/app/blog/lib/services/taxonomy";
 import { getUserFavorites } from "@/app/blog/lib/services/favorite";
 import { resolveAuthorProfiles } from "@/app/blog/lib/services/author";
+import { getPlaylistForArticle } from "@/app/blog/lib/services/playlist";
 import { isAdmin } from "@/app/blog/lib/admin";
 import { getBlogSession } from "@/app/blog/lib/session";
 import { ArticleHeader } from "@/app/blog/components/ArticleHeader";
@@ -198,7 +207,11 @@ async function ArticleSection({
     }
   }
 
-  const allTags = await listTags();
+  const [allTags, playlist] = await Promise.all([
+    listTags(),
+    getPlaylistForArticle(article.id),
+  ]);
+
   const tagNames = article.tagIds
     .map((id) => allTags.find((t) => t.id === id)?.name)
     .filter((n): n is string => Boolean(n));
@@ -234,6 +247,7 @@ async function ArticleSection({
         tagNames={tagNames}
         authorName={authorName}
         authorImage={authorImage}
+        playlist={playlist}
         isAuthenticated={Boolean(viewerId)}
         initiallyLiked={isLiked}
         initiallyFavorited={isFavorited}

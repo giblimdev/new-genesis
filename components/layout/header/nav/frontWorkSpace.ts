@@ -7,12 +7,22 @@ generic:         false
 role:            Source unique de navigation de l'application. Exporte
                  mainNavData, consommé exclusivement par Header.tsx.
                  Branche les pages d'entrée Blog (/blog, /blog/search,
-                 /blog/community, /blog/user/favorites, /blog/notifications,
-                 /blog/help) sous l'entrée « Blog », et les pages Admin
-                 (/admin, /admin/users) sous l'entrée « Admin ». Les
-                 entrées Admin portent roles: ["admin"] — elles ne sont
-                 affichées qu'aux utilisateurs ayant ce rôle (filtrage
-                 effectué dans MainNav via la prop userRole).
+                 /blog/community, /blog/playlists, /blog/playlists/manage,
+                 /blog/user/favorites, /blog/notifications, /blog/help)
+                 sous l'entrée « Blog », les pages Scrum
+                 (/scrum/scrum-business, /scrum/scrum-app,
+                 /scrum/scrum-genesis, /scrum/help) sous l'entrée
+                 « Conception », et les pages Admin (/admin, /admin/users)
+                 sous l'entrée « Admin ». Les entrées Admin et « Gérer
+                 les playlists » portent roles: ["admin"] ou
+                 roles: ["admin", "author"] — elles ne sont affichées
+                 qu'aux utilisateurs ayant le rôle correspondant
+                 (filtrage effectué dans MainNav via la prop userRole).
+
+                 Depuis la migration core → scrum : les segments
+                 physiques sont /scrum/* (au lieu de /core/*). Les
+                 valeurs de flux (ScrumFlow) restent inchangées :
+                 "scrum-business" | "scrum-app" | "scrum-genesis".
 
 flow:            Module TypeScript pur → export d'un tableau readonly
                  de NavItem. Aucun état, aucun effet.
@@ -21,7 +31,10 @@ ecosystem:       Layout = [
                    "@/components/layout/header/nav/frontWorkSpace.ts",
                    "@/components/layout/header/navTypes.ts",
                    "@/components/layout/header/MainNav.tsx",
+                   "@/components/layout/header/NavActiveLink.tsx",
                    "@/components/layout/header/Header.tsx",
+                   "@/components/layout/header/Logo.tsx",
+                   "@/components/layout/header/UserMenu.tsx",
                  ]
 
 relatedFiles:    ["@/components/layout/header/navTypes.ts",
@@ -34,7 +47,8 @@ exports:         ["mainNavData"]
 useBy:           ["@/components/layout/header/Header.tsx"]
 
 userStories:     ["*en tant que développeur je veux naviguer dans l'app"]
-status:          done
+
+status:          wip
 pathChecked:     ✔true
 metaDataChecked: ✔true
 scriptChecked:   ✔true
@@ -57,7 +71,8 @@ export const mainNavData: readonly NavItem[] = [
     id: "nav-blog",
     label: "Blog",
     href: "/blog",
-    description: "Articles, recherche, communauté, favoris et notifications",
+    description:
+      "Articles, recherche, communauté, playlists, favoris et notifications",
     displayOrder: 20,
     visible: true,
     disabled: false,
@@ -95,6 +110,26 @@ export const mainNavData: readonly NavItem[] = [
         roles: undefined,
       },
       {
+        id: "nav-blog-playlists",
+        label: "Playlists",
+        href: "/blog/playlists",
+        displayOrder: 35,
+        visible: true,
+        disabled: false,
+        external: false,
+        roles: undefined,
+      },
+      {
+        id: "nav-blog-playlists-manage",
+        label: "Gérer les playlists",
+        href: "/blog/playlists/manage",
+        displayOrder: 36,
+        visible: true,
+        disabled: false,
+        external: false,
+        roles: ["admin"],
+      },
+      {
         id: "nav-blog-favorites",
         label: "Mes favoris",
         href: "/blog/user/favorites",
@@ -127,7 +162,7 @@ export const mainNavData: readonly NavItem[] = [
     ],
   },
   {
-    id: "nav-core",
+    id: "nav-scrum",
     label: "Conception",
     href: "",
     description: "Conception du projet",
@@ -138,9 +173,9 @@ export const mainNavData: readonly NavItem[] = [
     roles: undefined,
     children: [
       {
-        id: "nav-core-business",
+        id: "nav-scrum-business",
         label: "ScrumBusiness",
-        href: "/core/scrum-business",
+        href: "/scrum/scrum-business",
         displayOrder: 10,
         visible: true,
         disabled: false,
@@ -148,9 +183,9 @@ export const mainNavData: readonly NavItem[] = [
         roles: undefined,
       },
       {
-        id: "nav-core-app",
+        id: "nav-scrum-app",
         label: "ScrumApp",
-        href: "/core/scrum-app",
+        href: "/scrum/scrum-app",
         displayOrder: 20,
         visible: true,
         disabled: false,
@@ -158,9 +193,9 @@ export const mainNavData: readonly NavItem[] = [
         roles: undefined,
       },
       {
-        id: "nav-core-genesis",
+        id: "nav-scrum-genesis",
         label: "Scrum-Genesis",
-        href: "/core/scrum-genesis",
+        href: "/scrum/scrum-genesis",
         displayOrder: 30,
         visible: true,
         disabled: false,
@@ -168,9 +203,9 @@ export const mainNavData: readonly NavItem[] = [
         roles: undefined,
       },
       {
-        id: "nav-core-help",
-        label: "Aide Core",
-        href: "/core/help",
+        id: "nav-scrum-help",
+        label: "Aide Scrum",
+        href: "/scrum/help",
         displayOrder: 40,
         visible: true,
         disabled: false,
@@ -215,6 +250,16 @@ export const mainNavData: readonly NavItem[] = [
         label: "SelectFiles",
         href: "/genesis/read-files",
         displayOrder: 30,
+        visible: true,
+        disabled: false,
+        external: false,
+        roles: undefined,
+      },
+      {
+        id: "nav-genesis-cmd",
+        label: "Commandes",
+        href: "/genesis/cmd",
+        displayOrder: 35,
         visible: true,
         disabled: false,
         external: false,

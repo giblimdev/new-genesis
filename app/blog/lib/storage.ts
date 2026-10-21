@@ -1,26 +1,29 @@
 /*
 path :           app/blog/lib/storage.ts
-tag :            ["blog", "storage", "atomic", "mutex", "server-only"]
+tag :            ["blog", "storage", "atomic", "mutex", "migration", "server-only"]
 projectId:       new-genesis
 type:            helper
 generic:         true
 
 role:            Seul fichier autorisé à toucher data/blog.json. Expose
-                 readBlog() (lecture + parse + validation Zod + tri
-                 stable des thèmes et tags par order) et mutateBlog(fn)
-                 (lecture + fn + validation Zod + écriture atomique
-                 temp + rename, protégée par un mutex global). Si le
-                 fichier est absent, un document vide valide est créé au
-                 boot. Importable UNIQUEMENT côté serveur.
+                 readBlog() (lecture + auto-migration v2→v3 + parse +
+                 validation Zod) et mutateBlog(fn) (lecture + fn + validation
+                 Zod + écriture atomique temp + rename, protégée par un mutex
+                 global). Si le fichier est absent, un document vide valide
+                 est créé au boot — createEmptyBlogDocument inclut désormais
+                 playlists: [] (schéma v3). La fonction migrateToCurrentVersion
+                 détecte un document v2 (schemaVersion: 2, playlists absent)
+                 et le transforme en v3 en mémoire ; la persistance se fait
+                 au prochain mutateBlog (ou immédiatement via le script
+                 scripts/migrate-blog-v3.ts). Importable UNIQUEMENT côté
+                 serveur.
 
-flow:            readBlog → readFile → JSON.parse → blogDocumentSchema
-                 .parse (fail-fast) → tri des themes[].categories[] par
-                 order → BlogDocument.
+flow:            readBlog → readFile → JSON.parse → migrateToCurrentVersion
+                 (v2 → ajoute playlists: [], bump schemaVersion à 3) →
+                 blogDocumentSchema.parse (fail-fast) → BlogDocument.
                  mutateBlog(fn) → acquire(blogMutex) → readBlog → fn(doc)
                  → blogDocumentSchema.parse (revalidation) → écriture
                  data/blog.json.tmp → rename → release(blogMutex).
-                 blogMutex = queue à un seul slot : toute mutation attend
-                 la précédente.
 
 ecosystem:       BlogCore = [
                    "@/app/blog/lib/admin.ts",
@@ -35,24 +38,29 @@ ecosystem:       BlogCore = [
                  ]
 
 relatedFiles:    ["@/app/blog/lib/types.ts",
-                  "@/app/blog/lib/validations.ts"]
+                  "@/app/blog/lib/validations.ts",
+                  "@/scripts/migrate-blog-v3.ts"]
+
 imports:         ["server-only", "node:fs/promises", "node:path",
                   "@/app/blog/lib/types",
                   "@/app/blog/lib/validations"]
+
 exports:         ["readBlog", "mutateBlog", "blogFilePath",
                   "createEmptyBlogDocument"]
+
 useBy:           ["@/app/blog/lib/admin.ts",
                   "@/app/blog/lib/services/article.ts",
                   "@/app/blog/lib/services/comment.ts",
-                  "@/app/blog/lib/services/discussion.ts",
                   "@/app/blog/lib/services/favorite.ts",
                   "@/app/blog/lib/services/group.ts",
                   "@/app/blog/lib/services/like.ts",
                   "@/app/blog/lib/services/notification.ts",
+                  "@/app/blog/lib/services/playlist.ts",
                   "@/app/blog/lib/services/taxonomy.ts"]
 
 userStories:     ["us1100011"]
-status:          done
+
+status:          wip
 pathChecked:     ✔true
 metaDataChecked: ✔true
 scriptChecked:   ✔true
@@ -94,6 +102,7 @@ export function createEmptyBlogDocument(): BlogDocument {
       themes: [],
       tags: [],
     },
+    playlists: [],
     articles: [],
     groups: [],
     userContent: {},
@@ -102,7 +111,41 @@ export function createEmptyBlogDocument(): BlogDocument {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Mutex global (un seul slot)                                      */
+/*  Migration v2 → v3 (silencieuse, en mémoire)                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Détecte un document v2 (schemaVersion === 2, playlists absent) et le
+ * transforme en v3. Ne lève jamais : si le document n'est pas un objet
+ * ou si la version est inconnue, retourne l'objet tel quel (Zod lèvera
+ * une erreur explicite derrière).
+ */
+function migrateToCurrentVersion(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const doc = raw as Record<string, unknown>;
+  const meta = doc.meta as Record<string, unknown> | undefined;
+  const version =
+    typeof meta?.schemaVersion === "number" ? meta.schemaVersion : undefined;
+
+  if (version === undefined || version === BLOG_SCHEMA_VERSION) return raw;
+
+  if (version === 2) {
+    return {
+      ...doc,
+      playlists: Array.isArray(doc.playlists) ? doc.playlists : [],
+      meta: {
+        ...meta,
+        schemaVersion: BLOG_SCHEMA_VERSION,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  return raw;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Mutex global (un seul slot)                                       */
 /* ------------------------------------------------------------------ */
 
 type Resolver = () => void;
@@ -130,7 +173,8 @@ export async function readBlog(): Promise<BlogDocument> {
   try {
     const raw = await readFile(path, "utf-8");
     const parsed: unknown = JSON.parse(raw);
-    return blogDocumentSchema.parse(parsed) as BlogDocument;
+    const migrated = migrateToCurrentVersion(parsed);
+    return blogDocumentSchema.parse(migrated) as BlogDocument;
   } catch (error) {
     if (
       error instanceof Error &&
